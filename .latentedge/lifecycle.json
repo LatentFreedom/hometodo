@@ -1,0 +1,7 @@
+{
+  "app": "hometodo",
+  "stage": "dev",
+  "baseStage": "dev",
+  "expectedPaymentsMode": "none",
+  "notes": "New project bootstrapped 2026-09-26. Home and life todo tracker; open source."
+}

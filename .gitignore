@@ -1,0 +1,11 @@
+node_modules/
+.wrangler/
+.next/
+out/
+dist/
+.env
+.env.local
+.dev.vars
+*.local
+.DS_Store
+reminders.json
