@@ -1,0 +1,25 @@
+# Repo search hygiene for agents and developers.
+# Use `rg -u` or explicit paths when generated artifacts are intentionally needed.
+
+node_modules/
+.next/
+.wrangler/
+.turbo/
+coverage/
+dist/
+build/
+out/
+tmp/
+
+reports/
+.latentedge/reports/
+.latentedge/workspace/
+
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lockb
+worker-configuration.d.ts
+
+*.log
+*.tsbuildinfo

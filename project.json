@@ -1,0 +1,60 @@
+{
+  "project": {
+    "name": "Home Todos",
+    "description": "A small, self-hosted tracker for the work of running a home: contractor jobs, house repairs, life admin, and the people you call about each.",
+    "version": "0.1.0",
+    "author": "LatentEdge LLC",
+    "repository": "https://github.com/LatentFreedom/hometodo"
+  },
+  "domains": {
+    "frontend": {
+      "production": "",
+      "development": "http://localhost:3000",
+      "staging": ""
+    },
+    "worker": {
+      "production": "",
+      "development": "http://localhost:8787",
+      "staging": ""
+    }
+  },
+  "api": {
+    "base_url": ""
+  },
+  "features": {
+    "authentication": true,
+    "database": true,
+    "rate_limiting": false,
+    "external_apis": []
+  },
+  "external_services": {
+    "xai": {
+      "enabled": false
+    },
+    "email": {
+      "enabled": false
+    }
+  },
+  "database": {
+    "binding": "DB",
+    "name": "hometodo-db"
+  },
+  "deployment": {
+    "auto_deploy_on_push": true,
+    "deploy_branches": ["main"],
+    "frontend": {
+      "provider": "cloudflare_pages",
+      "auto": true
+    },
+    "worker": {
+      "provider": "cloudflare_workers",
+      "auto": true
+    }
+  },
+  "customization": {
+    "metadata": {
+      "site_title": "Home Todos",
+      "site_description": "A small, self-hosted tracker for the work of running a home."
+    }
+  }
+}

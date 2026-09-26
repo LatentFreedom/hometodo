@@ -1,0 +1,58 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "hometodo-worker",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-09-27",
+	"compatibility_flags": ["global_fetch_strictly_public"],
+	"observability": {
+		"enabled": true
+	},
+
+	/**
+	 * D1. This project owns its own database; nothing is shared with another app.
+	 *
+	 * Deploy step 1: run `npx wrangler d1 create hometodo-db` and paste the id it
+	 * prints into "database_id" below. Leaving the placeholder is safe by design -
+	 * `wrangler deploy` refuses it with Cloudflare error 10021 ("binding DB of type
+	 * d1 must have a valid database_id"), so a half-wired project cannot ship.
+	 * `--dry-run` does NOT catch this, because it skips the API call. Trust a real
+	 * deploy, never a dry run.
+	 *
+	 * Do not add "remote": true here. It forces the vitest pool to open a Cloudflare
+	 * remote preview session, and every spec then fails before it runs.
+	 */
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "hometodo-db",
+			"database_id": "REPLACE_ME_RUN_WRANGLER_D1_CREATE"
+		}
+	],
+
+	/**
+	 * Custom domain for the Worker. `custom_domain` lets `wrangler deploy` create the
+	 * DNS record and the route itself, so the only prerequisite is that the zone already
+	 * exists on the account. Replace the placeholder with the real API hostname before
+	 * the first deploy: unlike the D1 id above, a bogus hostname here does NOT stop the
+	 * deploy - wrangler happily binds the worker to a domain nobody owns.
+	 *
+	 * Self-hosting on a domain you do not have? Delete this whole block and reach the
+	 * worker at its workers.dev URL instead.
+	 */
+	"routes": [
+		{
+			"pattern": "REPLACE_ME_API_HOSTNAME",
+			"custom_domain": true
+		}
+	],
+
+	/**
+	 * Deployed values only. Local dev reads worker/.dev.vars, which overrides
+	 * FRONTEND_URL and ALLOWED_ORIGINS with their localhost equivalents - so localhost
+	 * must never appear here, or CORS rejects the real site.
+	 */
+	"vars": {
+		"FRONTEND_URL": "REPLACE_ME_FRONTEND_URL",
+		"ALLOWED_ORIGINS": "REPLACE_ME_FRONTEND_URL"
+	}
+}

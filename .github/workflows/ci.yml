@@ -1,0 +1,85 @@
+# Standard CI for this stack. The job list, action versions, and Node version match the
+# shared template; keep them in step rather than trimming a step here. A repo that is
+# missing a script the workflow calls should add the script, not edit the workflow.
+name: CI
+# Pull requests only: merges already deploy through Cloudflare, and running the same
+# checks again on every push was burning the free Actions minutes.
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  project-contract:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.layout.outputs.frontend }}
+      worker: ${{ steps.layout.outputs.worker }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      # Worker-only and frontend-only repos are legitimate layouts; the jobs below run
+      # only for the directories that exist, so this one file fits every repo.
+      - id: layout
+        name: Detect layout
+        run: |
+          echo "frontend=$([ -f frontend/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "worker=$([ -f worker/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      # Only the framework repo carries validate-template.sh; projects skip this step
+      # instead of failing on a script they do not have.
+      - name: Validate project contract guardrails
+        if: hashFiles('validate-template.sh') != ''
+        run: ./validate-template.sh --quick
+  frontend:
+    needs: project-contract
+    if: needs.project-contract.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+      # Non-blocking: the advisories this catches are transitive and clear with a
+      # dependency bump, not a code change. It still prints the report on every run.
+      - name: Audit
+        working-directory: frontend
+        continue-on-error: true
+        run: npm run audit
+  worker:
+    needs: project-contract
+    if: needs.project-contract.outputs.worker == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: worker/package-lock.json
+      - name: Install worker deps
+        working-directory: worker
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm ci
+      - name: Enforce email env standard
+        working-directory: worker
+        run: npm run check:email-env
+      - name: Enforce CORS guardrails
+        working-directory: worker
+        run: npm run check:cors
+      - name: Run worker tests
+        working-directory: worker
+        run: npm run test -- --run

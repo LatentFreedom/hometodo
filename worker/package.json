@@ -1,0 +1,29 @@
+{
+	"name": "worker",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"test": "vitest",
+		"cf-typegen": "wrangler types",
+		"check:email-env": "bash ./scripts/check-email-env-standard.sh",
+		"check:cors": "latentedge-worker-doctor",
+		"db:migrate": "wrangler d1 migrations apply hometodo-db --remote",
+		"db:migrate:local": "wrangler d1 migrations apply hometodo-db --local",
+		"pretypecheck": "wrangler types",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@latentfreedom/latentedge-auth-package": "^2.0.1",
+		"@latentfreedom/latentedge-worker-core": "^2.0.0",
+		"hono": "^4.6.14"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.12.4",
+		"typescript": "^5.5.2",
+		"vitest": "~3.2.0",
+		"wrangler": "^4.59.3"
+	}
+}

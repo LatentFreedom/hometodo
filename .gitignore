@@ -1,11 +1,41 @@
 node_modules/
-.wrangler/
-.next/
-out/
-dist/
+.DS_Store
+*.log
 .env
 .env.local
 .dev.vars
+.next/
+out/
+dist/
+.wrangler/
 *.local
-.DS_Store
+
+# Local env secrets
+**/.env.local
+**/.dev.vars
+
+# Private import scratch. Reminders exports hold real names and addresses.
 reminders.json
+
+# >>> agent-managed-standards (auto) >>>
+# Package-owned files, rewritten on every sync. Tracking them is pure noise,
+# and this repo is public: the synced copies carry absolute home paths and
+# internal tooling names that must not be published.
+# .latentedge/DECISIONS.md is deliberately absent: the sync seeds it once and
+# the project owns it from then on.
+/.latentedge/STANDARDS.md
+/.latentedge/SKILL.md
+/.latentedge/SOUL.md
+/.latentedge/PACKAGES.md
+/.latentedge/.gitignore
+/.latentedge/.npmrc
+/.latentedge/package.json
+/.latentedge/.standards-version
+/.latentedge/.standards-lock.json
+/.latentedge/update.sh
+/.latentedge/guardrails.sh
+/.latentedge/workspace/
+/.latentedge/context/
+# Generated reports are disposable.
+/.latentedge/reports/
+# <<< agent-managed-standards (auto) <<<

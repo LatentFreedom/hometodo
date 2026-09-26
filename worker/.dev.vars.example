@@ -1,0 +1,14 @@
+# Worker secrets for local `wrangler dev` only. Copy to .dev.vars; never commit .dev.vars.
+#
+# Non-secret config (FRONTEND_URL, ALLOWED_ORIGINS) lives in wrangler.jsonc `vars`.
+# Do not duplicate it here.
+#
+# For a deploy, push each key with: wrangler secret put <KEY>
+
+# Signs and verifies session tokens. 32 characters minimum, 64 or more recommended.
+JWT_SECRET=replace-with-strong-random-secret
+
+# One-time key that authorises POST /api/v1/auth/bootstrap, the only way to create
+# the single admin account. The route refuses once an account exists, so this key is
+# useless after first use - but treat it as a secret anyway and rotate it after setup.
+ADMIN_SETUP_KEY=replace-with-strong-random-setup-key
