@@ -52,7 +52,7 @@
 	 * must never appear here, or CORS rejects the real site.
 	 */
 	"vars": {
-		"FRONTEND_URL": "REPLACE_ME_FRONTEND_URL",
-		"ALLOWED_ORIGINS": "REPLACE_ME_FRONTEND_URL"
+		"FRONTEND_URL": "https://hometodo.latentedge.io",
+		"ALLOWED_ORIGINS": "https://hometodo.latentedge.io,https://hometodo.pages.dev,http://localhost:3000,http://127.0.0.1:3000"
 	}
 }
