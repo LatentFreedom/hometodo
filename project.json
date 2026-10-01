@@ -8,18 +8,18 @@
   },
   "domains": {
     "frontend": {
-      "production": "",
+      "production": "https://home.imnotbot.com",
       "development": "http://localhost:3000",
       "staging": ""
     },
     "worker": {
-      "production": "",
+      "production": "https://home.imnotbot.com/api",
       "development": "http://localhost:8787",
       "staging": ""
     }
   },
   "api": {
-    "base_url": ""
+    "base_url": "https://home.imnotbot.com/api/v1"
   },
   "features": {
     "authentication": true,
@@ -41,7 +41,9 @@
   },
   "deployment": {
     "auto_deploy_on_push": true,
-    "deploy_branches": ["main"],
+    "deploy_branches": [
+      "main"
+    ],
     "frontend": {
       "provider": "cloudflare_pages",
       "auto": true

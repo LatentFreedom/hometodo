@@ -30,19 +30,18 @@
 	],
 
 	/**
-	 * Custom domain for the Worker. `custom_domain` lets `wrangler deploy` create the
-	 * DNS record and the route itself, so the only prerequisite is that the zone already
-	 * exists on the account. Replace the placeholder with the real API hostname before
-	 * the first deploy: unlike the D1 id above, a bogus hostname here does NOT stop the
-	 * deploy - wrangler happily binds the worker to a domain nobody owns.
+	 * The site and the API share one hostname: Pages serves the site there, and this
+	 * zone route sends only /api/* to the Worker, so the browser never makes a
+	 * cross-origin call in production. The route does not create a DNS record; the
+	 * hostname resolves once it is attached to the Pages project as a custom domain.
 	 *
-	 * Self-hosting on a domain you do not have? Delete this whole block and reach the
-	 * worker at its workers.dev URL instead.
+	 * Self-hosting on a domain you do not have? Delete this whole block, reach the
+	 * worker at its workers.dev URL, and set NEXT_PUBLIC_API_URL to that URL.
 	 */
 	"routes": [
 		{
-			"pattern": "REPLACE_ME_API_HOSTNAME",
-			"custom_domain": true
+			"pattern": "home.imnotbot.com/api/*",
+			"zone_name": "imnotbot.com"
 		}
 	],
 
@@ -52,7 +51,7 @@
 	 * must never appear here, or CORS rejects the real site.
 	 */
 	"vars": {
-		"FRONTEND_URL": "https://hometodo.latentedge.io",
-		"ALLOWED_ORIGINS": "https://hometodo.latentedge.io,https://hometodo.pages.dev,http://localhost:3000,http://127.0.0.1:3000"
+		"FRONTEND_URL": "https://home.imnotbot.com",
+		"ALLOWED_ORIGINS": "https://home.imnotbot.com,https://hometodo.pages.dev,http://localhost:3000,http://127.0.0.1:3000"
 	}
 }
