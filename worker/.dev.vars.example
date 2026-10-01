@@ -3,8 +3,13 @@
 # Non-secret config (FRONTEND_URL, ALLOWED_ORIGINS) lives in wrangler.jsonc `vars`.
 # Do not duplicate it here.
 #
-# For a deploy, push the key with: wrangler secret put ADMIN_API_KEY
+# For a deploy, push each secret with: wrangler secret put <NAME>
 
 # The one shared admin key. Every API route except /api/v1/health requires it in the
 # X-Admin-API-Key header. Rotate it to revoke access everywhere at once.
 ADMIN_API_KEY=replace-with-a-long-random-key
+
+# Read-only token for other apps. Sent as "Authorization: Bearer <token>", it opens
+# GET /api/v1/summary and nothing else; every other route answers 403. Leave it unset
+# and the summary needs the admin key like everything else.
+READ_TOKEN=replace-with-a-different-long-random-token

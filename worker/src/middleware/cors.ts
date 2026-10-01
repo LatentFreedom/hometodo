@@ -5,7 +5,12 @@ import type { Env } from '../types/env';
 
 // The admin key travels in a custom header, which the browser must be allowed to send
 // on a cross-origin call (local dev runs the site and the API on different ports).
-const CORS_OPTIONS = { extraAllowHeaders: [ADMIN_KEY_HEADER] };
+// The method list is set outright because the package default has no PATCH, which
+// every partial update here uses, and advertises PUT, which no route serves.
+const CORS_OPTIONS = {
+	extraAllowHeaders: [ADMIN_KEY_HEADER],
+	allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+};
 
 /**
  * Strict allow-list CORS for every route.

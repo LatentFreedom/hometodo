@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import { API_BASE_PATH } from '../config/api';
-import { checkAdminAuth, providedAdminKey } from '../lib/auth';
+import { checkAdminAuth, checkReadToken, providedAdminKey, providedBearerToken } from '../lib/auth';
 import type { Env } from '../types/env';
 
 // Only the liveness probe is public. Everything else, including unknown paths, needs
@@ -12,13 +12,28 @@ const PUBLIC_PATHS = new Set([`${API_BASE_PATH}/health`]);
 const FAILURE_WINDOW_SECONDS = 600;
 const MAX_FAILURES_PER_WINDOW = 20;
 
+// The read token opens exactly one route and one method. Matching the exact path
+// fails closed: an encoded or otherwise unusual spelling of the summary path is
+// refused with 403 rather than let through.
+const READ_TOKEN_METHOD = 'GET';
+const READ_TOKEN_PATH = `${API_BASE_PATH}/summary`;
+
 export const adminGate: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
 	const path = new URL(c.req.url).pathname.replace(/\/+$/, '');
 	if (PUBLIC_PATHS.has(path)) return next();
 	if (checkAdminAuth(c.req.raw, c.env)) return next();
 
-	// A request with no key at all is a fresh visitor, not a guess; only wrong keys count.
-	if (providedAdminKey(c.req.raw) !== '') {
+	// A valid read token is a known caller, so it gets 403 (not 401) everywhere else:
+	// the credential is fine, it is just not enough. It never counts as a failure.
+	if (checkReadToken(c.req.raw, c.env)) {
+		if (c.req.method === READ_TOKEN_METHOD && path === READ_TOKEN_PATH) return next();
+		return c.json({ error: 'FORBIDDEN', message: 'The read token only opens GET /api/v1/summary' }, 403);
+	}
+
+	// A request with no credential at all is a fresh visitor, not a guess; only wrong
+	// values count. A wrong bearer value shares the admin-key budget, so a second
+	// header cannot double the guesses an IP gets.
+	if (providedAdminKey(c.req.raw) !== '' || providedBearerToken(c.req.raw) !== '') {
 		const throttled = await recordFailure(c.env.DB, clientIp(c.req.raw), path);
 		if (throttled) {
 			return c.json({ error: 'TOO_MANY_ATTEMPTS', message: 'Too many attempts. Try again later.' }, 429);

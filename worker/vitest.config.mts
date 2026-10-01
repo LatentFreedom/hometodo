@@ -25,6 +25,7 @@ export default defineWorkersConfig({
 						// Test-only secret. Without it the suite reads a developer's untracked
 						// .dev.vars and fails anywhere that file is absent, such as CI.
 						ADMIN_API_KEY: 'test-admin-key',
+						READ_TOKEN: 'test-read-token',
 						// wrangler.jsonc vars are the deployed values; this pool reads
 						// wrangler.jsonc directly, not .dev.vars, so tests need their own
 						// localhost overrides to exercise real local CORS behaviour.
