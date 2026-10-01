@@ -13,13 +13,16 @@ describe('migrations', () => {
 		expect(tables).toEqual(expect.arrayContaining(['projects', 'todos', 'contacts']));
 	});
 
-	it('creates the auth tables the package expects by default', async () => {
+	it('has no account tables and keeps the wrong-key throttle table', async () => {
 		const result = await env.DB.prepare(
 			"SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
 		).all<{ name: string }>();
 		const tables = result.results.map((row) => row.name);
 
-		expect(tables).toEqual(expect.arrayContaining(['users', 'password_reset_tokens', 'auth_refresh_tokens']));
+		expect(tables).toContain('access_failures');
+		for (const removed of ['users', 'password_reset_tokens', 'auth_refresh_tokens']) {
+			expect(tables).not.toContain(removed);
+		}
 	});
 
 	it('rejects a project kind outside the allowed set', async () => {

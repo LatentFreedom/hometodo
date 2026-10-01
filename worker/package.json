@@ -16,7 +16,6 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@latentfreedom/latentedge-auth-package": "^2.0.1",
 		"@latentfreedom/latentedge-worker-core": "^2.0.0",
 		"hono": "^4.6.14"
 	},

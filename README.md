@@ -17,8 +17,8 @@ One person owns an installation. There is no signup, no sharing, and no second u
 
 ## Status
 
-This release ships the database schema, admin authentication, and a sign-in page.
-There is no dashboard yet: the API serves a health probe and the auth routes only.
+This release ships the database schema and the admin-key gate.
+There is no dashboard yet: the API serves a health probe and a key check only.
 
 ## Your data is yours
 
@@ -33,16 +33,32 @@ and nothing is sent anywhere else.
 | Web pages | Next.js static export on Cloudflare Pages |
 | API | Cloudflare Worker (Hono) |
 | Database | Cloudflare D1 (SQLite) |
-| Auth | `@latentfreedom/latentedge-auth-package`, single admin account |
+| Auth | One admin key, held as a Cloudflare secret |
 
 You need a Cloudflare account (the free plan is enough), Node.js 22 or later, and
 `npx wrangler login` already done.
 
+## How access works
+
+There are no accounts. One admin key, stored as the `ADMIN_API_KEY` Worker secret,
+opens everything.
+
+- The site shows a single "Admin key" field. The key is checked against the API and
+  saved in the browser, so you type it once per device.
+- Every API route except `/api/v1/health` requires the key in the `X-Admin-API-Key`
+  header. Without it, every path answers `401`, including unknown ones.
+- After 20 wrong keys from one IP address in ten minutes, the API answers `429` until
+  the window passes. A correct key is never throttled. Guesses are never stored.
+- The key never expires. To revoke every device at once, set a new value with
+  `wrangler secret put ADMIN_API_KEY`.
+
 ## Deploy it in ten minutes
 
-Four steps. Run them in order: the database has to exist before the code that reads it.
+Run the steps in order: the database has to exist before the code that reads it.
+The site and the API share one hostname. Pages serves the site, and a Worker route
+sends `/api/*` on that hostname to the Worker.
 
-### 1. Create the database
+### 1. Create the database and set your hostname
 
 ```bash
 git clone https://github.com/LatentFreedom/hometodo.git
@@ -50,14 +66,14 @@ cd hometodo
 npx wrangler d1 create hometodo-db
 ```
 
-That prints a `database_id`. Open `worker/wrangler.jsonc` and paste it over
-`REPLACE_ME_RUN_WRANGLER_D1_CREATE`. While you are in that file, replace the two
-`REPLACE_ME_FRONTEND_URL` values with the URL your site will be served from, and
-either set `routes[0].pattern` to the hostname you want the API on or delete the
-whole `routes` block to use the free `*.workers.dev` URL instead.
+That prints a `database_id`. Open `worker/wrangler.jsonc` and:
 
-Leaving the database id as the placeholder is safe: `wrangler deploy` refuses it with
-Cloudflare error 10021. It is not caught by `--dry-run`, which skips the API call.
+- paste the id into `d1_databases[0].database_id`;
+- set `routes[0].pattern` to `<your-hostname>/api/*` and `zone_name` to your zone;
+- set `FRONTEND_URL` and the first `ALLOWED_ORIGINS` entry to `https://<your-hostname>`.
+
+No domain on Cloudflare? Delete the `routes` block, use the Worker's `*.workers.dev`
+URL, and put that URL in `frontend/.env.production` as `NEXT_PUBLIC_API_URL`.
 
 ### 2. Apply the migrations
 
@@ -76,55 +92,40 @@ npx wrangler d1 execute hometodo-db --remote \
   --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 ```
 
-You should see `projects`, `todos`, `contacts`, and the three auth tables.
+You should see `projects`, `todos`, `contacts`, and `access_failures`.
 
-### 3. Set the secrets
-
-```bash
-# From worker/
-npx wrangler secret put JWT_SECRET       # 64 random characters
-npx wrangler secret put ADMIN_SETUP_KEY  # another random string, used once in step 4
-```
-
-Generate either with `openssl rand -base64 48`.
-
-### 4. Deploy, then create your account
+### 3. Deploy the Worker and set the key
 
 ```bash
 # From worker/
 npx wrangler deploy
-
-# From frontend/
-cd ../frontend
-npm install
-# put the deployed Worker URL in .env.production as NEXT_PUBLIC_API_URL
-npm run build
-npx wrangler pages deploy out --project-name hometodo
+npx wrangler secret put ADMIN_API_KEY   # type a long key you can remember
 ```
 
-Check the API is alive, then create the one and only account:
+Until the secret exists, every gated route answers `401`. That is deliberate: a
+deploy that forgot the key is locked, not open.
+
+### 4. Deploy the site
+
+In the Cloudflare dashboard, create a Pages project connected to your fork of this
+repository, with root directory `frontend`, build command `npx next build`, and
+output directory `out`. Then add `<your-hostname>` as the project's custom domain.
+
+Check it:
 
 ```bash
-curl https://<your-worker-url>/api/v1/health
+curl https://<your-hostname>/api/v1/health
 # {"status":"ok","service":"hometodo-worker"}
-
-curl -X POST https://<your-worker-url>/api/v1/auth/bootstrap \
-  -H "Content-Type: application/json" \
-  -H "X-Admin-Key: <the ADMIN_SETUP_KEY from step 3>" \
-  -d '{"email":"you@example.com","password":"a-long-password","name":"Your Name"}'
 ```
 
-The bootstrap route refuses once an account exists, so nobody who finds the URL later
-can create a second one. There is no signup route, and adding one is out of bounds.
-
-Sign in at `https://<your-site>/sign-in/`.
+Open `https://<your-hostname>/` and enter the key.
 
 ## Run it locally
 
 ```bash
 # Terminal 1 - API on http://localhost:8787
 cd worker
-cp .dev.vars.example .dev.vars   # then set JWT_SECRET and ADMIN_SETUP_KEY
+cp .dev.vars.example .dev.vars   # then set ADMIN_API_KEY
 npx wrangler d1 migrations apply hometodo-db --local
 npm run dev
 
@@ -150,23 +151,23 @@ breaks a query fails a test instead of a deploy.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/v1/health` | Liveness probe. Does not touch the database. |
-| `POST` | `/api/v1/auth/bootstrap` | One-time admin creation. Needs `X-Admin-Key`. Refuses once an account exists. |
-| `POST` | `/api/v1/auth/login` | Returns an access token, a refresh token, and the user. |
-| `POST` | `/api/v1/auth/refresh` | Exchanges a refresh token for a new access token. |
-| `POST` | `/api/v1/auth/logout` | Revokes a refresh token. |
-| `GET` | `/api/v1/auth/me` | Returns the signed-in user. Needs `Authorization: Bearer`. |
+| `GET` | `/api/v1/health` | Liveness probe. Public. Does not touch the database. |
+| `GET` | `/api/v1/access` | Key check for the site gate. Returns `{"auth_level":"admin"}`. |
 
-Anything else answers `404`, including `/api/v1/auth/signup`. That is deliberate.
+Every other path answers `401` without the key and `404` with it. There is no login,
+signup, or session route.
 
 ## Layout
 
 ```
-frontend/            Next.js static export. Sign-in page only, for now.
+frontend/            Next.js static export behind a key gate. No dashboard yet.
+  components/        The access gate
+  lib/api.ts         API calls; attaches the saved key
 worker/
   src/index.ts       Routing only
+  src/lib/auth.ts    Admin-key check
+  src/middleware/    CORS and the admin gate
   src/routes/        Route handlers
-  src/db/            Database wiring
   migrations/        D1 migrations, applied in order
   test/              Vitest suite, run against the real migrations
 ```

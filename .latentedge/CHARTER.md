@@ -19,8 +19,9 @@
 - No organization-internal vocabulary in tracked files. Synced standards files under
   `.latentedge/` are gitignored for the same reason: they carry absolute home paths.
 - Every project owns its own database. The D1 binding is `DB`, backed by `hometodo-db`.
-- Table names are unprefixed: `projects`, `todos`, `contacts`, plus the auth tables.
-- Single admin user. There is no signup route and none may be added.
+- Table names are unprefixed: `projects`, `todos`, `contacts`, plus `access_failures`.
+- Access is one admin key (`ADMIN_API_KEY` secret, `X-Admin-API-Key` header). There are
+  no accounts, and no login, signup, or session route may be added.
 
 ## Required Runtime Order
 1. Read `.latentedge/SKILL.md`.

@@ -55,13 +55,14 @@ carries a real name, address, phone number, or price.
 ## Stack
 
 Next.js static export on Cloudflare Pages, a Cloudflare Worker for the API, and D1
-for storage. Authentication is a single admin account with no signup path.
+for storage. Access is one admin key held as a Cloudflare secret: no accounts, no
+login, and no signup path.
 
 ## Scope
 
 In scope, in order:
 
-1. Schema and admin authentication (this repository's first release).
+1. Schema and the admin-key gate (this repository's first release).
 2. A Worker API: CRUD over the three records, plus a read-only summary endpoint that
    another application can call with a bearer token.
 3. A web interface: project cards, a per-project todo list, and a contacts page.

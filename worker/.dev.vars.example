@@ -3,12 +3,8 @@
 # Non-secret config (FRONTEND_URL, ALLOWED_ORIGINS) lives in wrangler.jsonc `vars`.
 # Do not duplicate it here.
 #
-# For a deploy, push each key with: wrangler secret put <KEY>
+# For a deploy, push the key with: wrangler secret put ADMIN_API_KEY
 
-# Signs and verifies session tokens. 32 characters minimum, 64 or more recommended.
-JWT_SECRET=replace-with-strong-random-secret
-
-# One-time key that authorises POST /api/v1/auth/bootstrap, the only way to create
-# the single admin account. The route refuses once an account exists, so this key is
-# useless after first use - but treat it as a secret anyway and rotate it after setup.
-ADMIN_SETUP_KEY=replace-with-strong-random-setup-key
+# The one shared admin key. Every API route except /api/v1/health requires it in the
+# X-Admin-API-Key header. Rotate it to revoke access everywhere at once.
+ADMIN_API_KEY=replace-with-a-long-random-key

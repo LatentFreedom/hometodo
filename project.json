@@ -6,6 +6,7 @@
     "author": "LatentEdge LLC",
     "repository": "https://github.com/LatentFreedom/hometodo"
   },
+  "auth": "env-token",
   "domains": {
     "frontend": {
       "production": "https://home.imnotbot.com",

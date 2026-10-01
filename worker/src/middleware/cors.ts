@@ -1,6 +1,11 @@
 import type { MiddlewareHandler } from 'hono';
 import { getCorsHeaders, handleCorsPreflight, parseAllowedOrigins } from '@latentfreedom/latentedge-worker-core/cors';
+import { ADMIN_KEY_HEADER } from '../lib/auth';
 import type { Env } from '../types/env';
+
+// The admin key travels in a custom header, which the browser must be allowed to send
+// on a cross-origin call (local dev runs the site and the API on different ports).
+const CORS_OPTIONS = { extraAllowHeaders: [ADMIN_KEY_HEADER] };
 
 /**
  * Strict allow-list CORS for every route.
@@ -12,12 +17,12 @@ import type { Env } from '../types/env';
 export const cors: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
 	const allowedOrigins = parseAllowedOrigins(c.env.ALLOWED_ORIGINS);
 
-	const preflight = handleCorsPreflight(c.req.raw, allowedOrigins);
+	const preflight = handleCorsPreflight(c.req.raw, allowedOrigins, CORS_OPTIONS);
 	if (preflight) return preflight;
 
 	await next();
 
-	const headers = getCorsHeaders(c.req.header('Origin') ?? null, allowedOrigins) as Record<string, string>;
+	const headers = getCorsHeaders(c.req.header('Origin') ?? null, allowedOrigins, CORS_OPTIONS) as Record<string, string>;
 	for (const [name, value] of Object.entries(headers)) {
 		c.header(name, value);
 	}

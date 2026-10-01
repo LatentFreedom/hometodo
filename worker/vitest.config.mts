@@ -22,10 +22,9 @@ export default defineWorkersConfig({
 				miniflare: {
 					bindings: {
 						TEST_MIGRATIONS: migrations,
-						// Test-only secrets. Without them the suite reads a developer's
-						// untracked .dev.vars and fails anywhere that file is absent, such as CI.
-						JWT_SECRET: 'test-only-jwt-secret-not-used-outside-vitest-runs',
-						ADMIN_SETUP_KEY: 'test-only-admin-setup-key',
+						// Test-only secret. Without it the suite reads a developer's untracked
+						// .dev.vars and fails anywhere that file is absent, such as CI.
+						ADMIN_API_KEY: 'test-admin-key',
 						// wrangler.jsonc vars are the deployed values; this pool reads
 						// wrangler.jsonc directly, not .dev.vars, so tests need their own
 						// localhost overrides to exercise real local CORS behaviour.

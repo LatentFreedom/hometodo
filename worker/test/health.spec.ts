@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { API_BASE_PATH } from '../src/config/api';
-import { get } from './helpers';
+import { adminHeaders, get } from './helpers';
 
 describe('GET /api/v1/health', () => {
 	it('returns 200 with an ok status', async () => {
@@ -21,8 +21,9 @@ describe('GET /api/v1/health', () => {
 });
 
 describe('unknown routes', () => {
+	// Unknown paths sit behind the admin gate, so the 404 only shows with the key.
 	it('returns 404 for a path the worker does not serve', async () => {
-		const response = await get(`${API_BASE_PATH}/nope`);
+		const response = await get(`${API_BASE_PATH}/nope`, adminHeaders());
 
 		expect(response.status).toBe(404);
 	});
