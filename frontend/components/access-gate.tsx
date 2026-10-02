@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { clearSavedKey, readSavedKey, saveKey, verifyKey } from '../lib/api';
+import { SiteHeader } from './site-header';
 
 type GateState = 'checking' | 'locked' | 'unlocked';
 
@@ -37,7 +38,6 @@ export function AccessGate({ children }: { children: ReactNode }) {
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,25 +82,23 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
   if (state === 'checking') {
     return (
-      <main className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-neutral-500">Checking access...</p>
+      <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <p className="text-sm text-muted-foreground">Checking access...</p>
       </main>
     );
   }
 
   if (state === 'locked' || changing) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
+      <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 bg-background px-6 text-foreground">
         <h1 className="text-2xl font-semibold">{changing ? 'Change key' : 'Home Todos'}</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Enter the admin key to open this installation.
-        </p>
+        <p className="text-sm text-muted-foreground">Enter the admin key to open this installation.</p>
 
         <form className="flex flex-col gap-4" onSubmit={onSubmit}>
           <label className="flex flex-col gap-1">
             <span className="text-sm">Admin key</span>
             <input
-              className="rounded border border-neutral-300 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
+              className="rounded border border-border bg-input px-3 py-2 text-foreground"
               type="password"
               autoComplete="current-password"
               autoFocus
@@ -111,7 +109,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
           </label>
 
           <button
-            className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            className="rounded border border-foreground bg-foreground px-3 py-2 text-background disabled:opacity-50"
             type="submit"
             disabled={working}
           >
@@ -119,7 +117,11 @@ export function AccessGate({ children }: { children: ReactNode }) {
           </button>
 
           {changing ? (
-            <button className="text-sm text-neutral-500 underline underline-offset-4" type="button" onClick={() => setChanging(false)}>
+            <button
+              className="text-sm text-muted-foreground underline underline-offset-4"
+              type="button"
+              onClick={() => setChanging(false)}
+            >
               Cancel
             </button>
           ) : null}
@@ -135,38 +137,15 @@ export function AccessGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <>
-      <header className="flex justify-end px-6 pt-4">
-        <div className="relative">
-          <button
-            className="rounded border border-neutral-300 px-3 py-1 text-sm dark:border-neutral-700"
-            type="button"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            Key
-          </button>
-          {menuOpen ? (
-            <div className="absolute right-0 mt-2 flex w-44 flex-col rounded border border-neutral-300 bg-white py-1 text-sm shadow dark:border-neutral-700 dark:bg-neutral-900">
-              <button
-                className="px-3 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setError(null);
-                  setChanging(true);
-                }}
-              >
-                Change key
-              </button>
-              <button className="px-3 py-2 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800" type="button" onClick={clearKey}>
-                Clear saved key
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </header>
+    <div className="min-h-screen bg-background text-foreground">
+      <SiteHeader
+        onChangeKey={() => {
+          setError(null);
+          setChanging(true);
+        }}
+        onClearKey={clearKey}
+      />
       {children}
-    </>
+    </div>
   );
 }
