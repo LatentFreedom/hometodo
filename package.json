@@ -1,0 +1,16 @@
+{
+	"name": "hometodo-scripts",
+	"version": "0.0.0",
+	"private": true,
+	"description": "One-time local scripts for Home Todos. The app itself lives in frontend/ and worker/.",
+	"scripts": {
+		"export:reminders": "node scripts/reminders-export.js",
+		"import:reminders": "tsx scripts/reminders-import.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"tsx": "^4.19.2",
+		"typescript": "^5.7.0"
+	}
+}

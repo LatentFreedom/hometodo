@@ -162,6 +162,34 @@ npm test -- --run
 The test suite applies the real files in `worker/migrations/`, so a schema change that
 breaks a query fails a test instead of a deploy.
 
+## Import from Apple Reminders
+
+A one-time import that turns an existing Apple Reminders backlog into Home Todos data.
+Each Reminders list becomes a project; each reminder becomes a todo with
+`source: "reminders"` and its Reminders id kept as `external_id`.
+
+Run both commands on the Mac that holds the lists, from the repo root:
+
+```bash
+npm install
+node scripts/reminders-export.js
+HOMETODO_ADMIN_KEY=your-admin-key npm run import:reminders
+```
+
+- `scripts/reminders-export.js` reads every list and reminder from Reminders.app and
+  writes `reminders.json` next to it. The first run asks macOS for an Automation
+  grant: open **System Settings > Privacy & Security > Automation** and allow the
+  terminal app you ran the command from to control Reminders, then run it again.
+  `reminders.json` holds private data and is gitignored; it never gets committed.
+- `npm run import:reminders` reads `reminders.json` and sends it to the deployed API
+  with your admin key. Set `HOMETODO_API_URL` too if you are not importing into
+  `https://home.imnotbot.com` (it defaults there).
+- The import is safe to re-run: a reminder already imported is matched by its
+  Reminders id and updated in place, never duplicated. A completed reminder imports
+  as a `done` todo with `completed_at` set.
+- This is a one-time seed, not ongoing sync: nothing in Home Todos writes back to
+  Reminders, and nothing keeps the two in sync after the import.
+
 ## API
 
 Every route below except `/api/v1/health` needs the admin key in `X-Admin-API-Key`.
