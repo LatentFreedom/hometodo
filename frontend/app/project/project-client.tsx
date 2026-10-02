@@ -13,7 +13,7 @@ import {
   type Project,
   type Todo,
   type TodoStatus,
-} from '../../../lib/api';
+} from '../../lib/api';
 
 // A done todo stays visible for this long, then disappears from the collapsed
 // section entirely (the API never deletes it - this is a display-only cutoff).
@@ -251,14 +251,12 @@ export function ProjectClient() {
   const [addBusy, setAddBusy] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
 
-  // The static export serves one pre-rendered shell for every /projects/<id>/ path
-  // (see public/_redirects); the real id lives only in the browser's URL bar.
+  // The id travels in the query string (/project/?id=<id>): this is a static export,
+  // so one pre-rendered page serves every project and reads the id in the browser.
   useEffect(() => {
-    const segments = window.location.pathname.split('/').filter(Boolean);
-    const projectsIndex = segments.indexOf('projects');
-    const real = projectsIndex >= 0 ? segments[projectsIndex + 1] : undefined;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the real id from the browser URL (see public/_redirects)
-    setId(real ?? null);
+    const real = new URLSearchParams(window.location.search).get('id');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the id from the browser URL
+    setId(real && real.trim() !== '' ? real : null);
   }, []);
 
   useEffect(() => {

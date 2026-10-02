@@ -1,8 +1,0 @@
-# Cloudflare Pages redirects.
-#
-# Project ids live in the owner's own D1 database and cannot be known at build
-# time, so app/projects/[id]/page.tsx pre-renders one placeholder shell only.
-# This rewrites every real /projects/<id>/ request to that same static HTML
-# (200, not a redirect: the URL bar keeps the real id) - project-client.tsx then
-# reads the id back out of the browser's URL and fetches the real data.
-/projects/*    /projects/placeholder/index.html    200

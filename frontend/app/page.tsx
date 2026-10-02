@@ -16,7 +16,7 @@ function ProjectCard({ project }: { project: SummaryProject }) {
   const next = project.soonest_due[0] ?? null;
   return (
     <Link
-      href={`/projects/${project.id}/`}
+      href={`/project/?id=${encodeURIComponent(project.id)}`}
       className="flex flex-col gap-2 rounded border border-border bg-card p-4 text-card-foreground hover:border-foreground"
     >
       <div className="flex items-center justify-between gap-2">
