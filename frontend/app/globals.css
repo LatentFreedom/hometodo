@@ -20,6 +20,7 @@
     --muted: 245 245 245; /* neutral-100 */
     --muted-foreground: 115 115 115; /* neutral-500 */
     --ring: 23 23 23; /* neutral-900 */
+    --danger: 220 38 38; /* red-600 */
   }
 
   .dark {
@@ -33,6 +34,7 @@
     --muted: 23 23 23;
     --muted-foreground: 163 163 163; /* neutral-400 */
     --ring: 229 229 229;
+    --danger: 248 113 113; /* red-400 */
   }
 
   body {

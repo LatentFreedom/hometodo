@@ -122,7 +122,14 @@ export interface SummaryProject {
 }
 
 /** An API call that did not come back ok, with the worker's own error message when it sent one. */
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number = 0,
+  ) {
+    super(message);
+  }
+}
 
 /** Parses the worker's `{ error, message }` envelope; falls back to the status text. */
 async function readErrorMessage(response: Response): Promise<string> {
@@ -140,7 +147,7 @@ async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body !== undefined) headers.set('Content-Type', 'application/json');
   const response = await apiFetch(path, { ...init, headers });
-  if (!response.ok) throw new ApiError(await readErrorMessage(response));
+  if (!response.ok) throw new ApiError(await readErrorMessage(response), response.status);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
@@ -178,7 +185,17 @@ export function createTodo(input: TodoInput): Promise<{ todo: Todo }> {
   return apiJson('/api/v1/todos', { method: 'POST', body: JSON.stringify(input) });
 }
 
-export type TodoPatch = Partial<Pick<Todo, 'title' | 'status' | 'due_date' | 'contact_id'>>;
+export type TodoPatch = Partial<
+  Pick<Todo, 'title' | 'notes' | 'status' | 'due_date' | 'cost_cents' | 'contact_id' | 'project_id'>
+>;
+
+export function fetchTodo(id: string): Promise<{ todo: Todo }> {
+  return apiJson(`/api/v1/todos/${encodeURIComponent(id)}`);
+}
+
+export function deleteTodo(id: string): Promise<void> {
+  return apiJson(`/api/v1/todos/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
 
 export function updateTodo(id: string, changes: TodoPatch): Promise<{ todo: Todo }> {
   return apiJson(`/api/v1/todos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) });

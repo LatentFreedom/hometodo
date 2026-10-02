@@ -22,6 +22,7 @@ const config: Config = {
           foreground: 'rgb(var(--muted-foreground) / <alpha-value>)',
         },
         ring: 'rgb(var(--ring) / <alpha-value>)',
+        danger: 'rgb(var(--danger) / <alpha-value>)',
       },
       fontFamily: {
         sans: [

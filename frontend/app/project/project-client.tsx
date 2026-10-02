@@ -14,6 +14,7 @@ import {
   type Todo,
   type TodoStatus,
 } from '../../lib/api';
+import { formatCost, formatDay, isOverdue, notesPreview } from '../../lib/todo-format';
 
 // A done todo stays visible for this long, then disappears from the collapsed
 // section entirely (the API never deletes it - this is a display-only cutoff).
@@ -113,21 +114,16 @@ function TodoRow({
   contacts: Contact[];
   onChange: (todo: Todo) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(todo.title);
-  const [dueDate, setDueDate] = useState(todo.due_date ?? '');
-  const [contactId, setContactId] = useState(todo.contact_id ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const save = useCallback(
-    async (changes: Partial<{ title: string; status: TodoStatus; due_date: string | null; contact_id: string | null }>) => {
+  const setStatus = useCallback(
+    async (status: TodoStatus) => {
       setBusy(true);
       setError(null);
       try {
-        const { todo: saved } = await updateTodo(todo.id, changes);
+        const { todo: saved } = await updateTodo(todo.id, { status });
         onChange(saved);
-        setEditing(false);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not save the todo.');
       } finally {
@@ -137,106 +133,60 @@ function TodoRow({
     [todo.id, onChange],
   );
 
-  if (editing) {
-    return (
-      <li className="rounded border border-border bg-card p-3">
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            void save({ title: title.trim(), due_date: dueDate || null, contact_id: contactId || null });
-          }}
-        >
-          <label className="flex flex-1 min-w-[10rem] flex-col gap-1">
-            <span className="text-sm">Title</span>
-            <input
-              className="rounded border border-border bg-input px-3 py-2 text-foreground"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm">Due</span>
-            <input
-              type="date"
-              className="rounded border border-border bg-input px-3 py-2 text-foreground"
-              value={dueDate}
-              onChange={(event) => setDueDate(event.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm">Contact</span>
-            <select
-              className="rounded border border-border bg-input px-3 py-2 text-foreground"
-              value={contactId}
-              onChange={(event) => setContactId(event.target.value)}
-            >
-              <option value="">None</option>
-              {contacts.map((contact) => (
-                <option key={contact.id} value={contact.id}>
-                  {contact.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="submit"
-            className="rounded border border-foreground bg-foreground px-3 py-2 text-background disabled:opacity-50"
-            disabled={busy}
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            className="text-sm text-muted-foreground underline underline-offset-4"
-            onClick={() => setEditing(false)}
-          >
-            Cancel
-          </button>
-        </form>
-        {error ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-      </li>
-    );
-  }
-
+  const href = `/todo/?id=${encodeURIComponent(todo.id)}`;
   const linkedContact = contactName(contacts, todo.contact_id);
+  const preview = notesPreview(todo.notes);
+  const cost = formatCost(todo.cost_cents);
+  const overdue = isOverdue(todo);
+  const meta = [
+    todo.due_date ? { key: 'due', text: `Due ${formatDay(todo.due_date)}${overdue ? ' (overdue)' : ''}`, danger: overdue } : null,
+    linkedContact ? { key: 'contact', text: linkedContact, danger: false } : null,
+    cost ? { key: 'cost', text: cost, danger: false } : null,
+  ].filter((item): item is { key: string; text: string; danger: boolean } => item !== null);
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 rounded border border-border bg-card p-3">
-      <div className="min-w-0 break-words">
-        <p className={todo.status === 'done' ? 'line-through text-muted-foreground' : ''}>{todo.title}</p>
-        <p className="text-sm text-muted-foreground">
-          {todo.due_date ? `Due ${todo.due_date}` : ''}
-          {todo.due_date && linkedContact ? ' - ' : ''}
-          {linkedContact ?? ''}
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-wrap gap-2">
+    <li className="flex flex-col gap-2 rounded border border-border bg-card p-3">
+      <Link href={href} className="group flex min-w-0 flex-col gap-1">
+        <span className={`break-words font-medium group-hover:underline group-hover:underline-offset-4 ${todo.status === 'done' ? 'text-muted-foreground line-through' : ''}`}>
+          {todo.title}
+        </span>
+        {meta.length > 0 ? (
+          <span className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            {meta.map((item) => (
+              <span key={item.key} className={item.danger ? 'text-danger' : ''}>
+                {item.text}
+              </span>
+            ))}
+          </span>
+        ) : null}
+        {preview ? <span className="line-clamp-2 break-words text-sm text-muted-foreground">{preview}</span> : null}
+      </Link>
+      <div className="flex flex-wrap gap-3">
         {todo.status !== 'done' ? (
           <>
             {todo.status === 'open' ? (
-              <button type="button" className="text-sm underline underline-offset-4" onClick={() => void save({ status: 'waiting' })}>
+              <button type="button" disabled={busy} className="text-sm underline underline-offset-4 disabled:opacity-50" onClick={() => void setStatus('waiting')}>
                 Waiting
               </button>
             ) : (
-              <button type="button" className="text-sm underline underline-offset-4" onClick={() => void save({ status: 'open' })}>
+              <button type="button" disabled={busy} className="text-sm underline underline-offset-4 disabled:opacity-50" onClick={() => void setStatus('open')}>
                 Open
               </button>
             )}
-            <button type="button" className="text-sm underline underline-offset-4" onClick={() => void save({ status: 'done' })}>
+            <button type="button" disabled={busy} className="text-sm underline underline-offset-4 disabled:opacity-50" onClick={() => void setStatus('done')}>
               Done
             </button>
           </>
         ) : (
-          <button type="button" className="text-sm underline underline-offset-4" onClick={() => void save({ status: 'open' })}>
+          <button type="button" disabled={busy} className="text-sm underline underline-offset-4 disabled:opacity-50" onClick={() => void setStatus('open')}>
             Reopen
           </button>
         )}
-        <button type="button" className="text-sm underline underline-offset-4" onClick={() => setEditing(true)}>
-          Edit
-        </button>
+        <Link href={href} className="text-sm underline underline-offset-4">
+          {todo.notes ? 'Open notes and details' : 'Details'}
+        </Link>
       </div>
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
     </li>
   );
 }
