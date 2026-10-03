@@ -181,6 +181,8 @@ HOMETODO_ADMIN_KEY=your-admin-key npm run import:reminders
   grant: open **System Settings > Privacy & Security > Automation** and allow the
   terminal app you ran the command from to control Reminders, then run it again.
   `reminders.json` holds private data and is gitignored; it never gets committed.
+  Add `--open-only` to skip completed reminders and export only the open backlog:
+  `node scripts/reminders-export.js --open-only`.
 - `npm run import:reminders` reads `reminders.json` and sends it to the deployed API
   with your admin key. Set `HOMETODO_API_URL` too if you are not importing into
   `https://home.imnotbot.com` (it defaults there).
