@@ -207,11 +207,11 @@ Bodies are JSON, and every response is JSON except a `204`.
 | `GET` | `/api/v1/projects/:id` | One project, archived or not. |
 | `PATCH` | `/api/v1/projects/:id` | Change `name`, `kind`, `notes`, or `archived` (`true` or `false`). |
 | `DELETE` | `/api/v1/projects/:id` | Archive. Projects are never deleted; `PATCH {"archived":false}` restores. |
-| `GET` | `/api/v1/todos` | Todos in creation order, paged. See below. |
-| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, `source`, `external_id`. Returns `201`. |
-| `GET` | `/api/v1/todos/:id` | One todo. |
+| `GET` | `/api/v1/todos` | Todos in creation order, paged. See below. Sync pulls add `?updated_since=<UTC stamp>&include_deleted=true`. |
+| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201`. |
+| `GET` | `/api/v1/todos/:id` | One todo. Deleted todos are `404` unless `?include_deleted=true`. |
 | `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `cost_cents`, or `contact_id`. |
-| `DELETE` | `/api/v1/todos/:id` | Delete. Returns `204`. |
+| `DELETE` | `/api/v1/todos/:id` | Soft delete: stamps `deleted_at`, hides the row from every normal read. Returns `204`. |
 | `GET` | `/api/v1/contacts` | All contacts, by name. |
 | `POST` | `/api/v1/contacts` | Create: `name` (required), `role`, `phone`, `email`, `notes`. Returns `201`. |
 | `GET` | `/api/v1/contacts/:id` | One contact. |

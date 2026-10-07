@@ -4,7 +4,7 @@ import type { ProjectKind, TodoStatus } from '../lib/validate';
  * Everything the read token can see comes from these two queries. Each names its
  * columns rather than selecting *, so a contact's phone or email, or any column added
  * later, cannot reach the summary without someone editing this file on purpose.
- * Archived projects, and therefore their todos, are excluded in both.
+ * Archived projects, and therefore their todos, are excluded in both, as are deleted todos.
  */
 
 export interface SummaryCountRow {
@@ -34,7 +34,7 @@ export async function readSummary(db: D1Database): Promise<{ counts: SummaryCoun
 			        COALESCE(SUM(t.status = 'waiting'), 0) AS waiting_count,
 			        COALESCE(SUM(t.status = 'done'), 0) AS done_count
 			 FROM projects p
-			 LEFT JOIN todos t ON t.project_id = p.id
+			 LEFT JOIN todos t ON t.project_id = p.id AND t.deleted_at IS NULL
 			 WHERE p.archived_at IS NULL
 			 GROUP BY p.id
 			 ORDER BY p.name COLLATE NOCASE, p.id`,
@@ -47,7 +47,7 @@ export async function readSummary(db: D1Database): Promise<{ counts: SummaryCoun
 				          ROW_NUMBER() OVER (PARTITION BY t.project_id ORDER BY t.due_date, t.created_at, t.id) AS position
 				   FROM todos t
 				   JOIN projects p ON p.id = t.project_id
-				   WHERE p.archived_at IS NULL AND t.status != 'done' AND t.due_date IS NOT NULL
+				   WHERE p.archived_at IS NULL AND t.deleted_at IS NULL AND t.status != 'done' AND t.due_date IS NOT NULL
 				 )
 				 WHERE position <= ?
 				 ORDER BY project_id, position`,

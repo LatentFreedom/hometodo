@@ -76,6 +76,11 @@ describe('todos API', () => {
 		expect(await (await get(`${TODOS}/${todo.id}`, adminHeaders())).json()).toMatchObject({ todo: { id: todo.id } });
 		expect((await del(`${TODOS}/${todo.id}`, adminHeaders())).status).toBe(204);
 		expect((await get(`${TODOS}/${todo.id}`, adminHeaders())).status).toBe(404);
+		// A second delete finds nothing, and the row is still there for a sync pull
+		expect((await del(`${TODOS}/${todo.id}`, adminHeaders())).status).toBe(404);
+		const kept = (await (await get(`${TODOS}/${todo.id}?include_deleted=true`, adminHeaders())).json()) as { todo: Todo };
+		expect(kept.todo.id).toBe(todo.id);
+		expect(kept.todo.deleted_at).not.toBeNull();
 	});
 
 	it('answers 404 for a todo that does not exist', async () => {
@@ -292,5 +297,59 @@ describe('todo list and pagination', () => {
 		const all = await readPage('?include_archived=true');
 		expect(all.todos.map((todo) => todo.id).sort()).toEqual([visible.id, hidden.id].sort());
 		expect((await get(`${TODOS}?include_archived=1`, adminHeaders())).status).toBe(400);
+	});
+
+	describe('sync support', () => {
+		it('hides deleted todos from list and PATCH unless include_deleted=true', async () => {
+			const project = await createProject();
+			const kept = await createTodo(project.id);
+			const gone = await createTodo(project.id, { title: 'Example removed' });
+			await del(`${TODOS}/${gone.id}`, adminHeaders());
+
+			expect((await readPage('')).todos.map((todo) => todo.id)).toEqual([kept.id]);
+			expect((await patch(`${TODOS}/${gone.id}`, { title: 'Example revived' }, adminHeaders())).status).toBe(404);
+			const all = await readPage('?include_deleted=true');
+			expect(all.todos.map((todo) => todo.id).sort()).toEqual([kept.id, gone.id].sort());
+			expect(all.todos.find((todo) => todo.id === gone.id)?.deleted_at).not.toBeNull();
+		});
+
+		it('returns only rows changed at or after updated_since, in either stamp form', async () => {
+			const project = await createProject();
+			const old = await createTodo(project.id, { title: 'Example old' });
+			const fresh = await createTodo(project.id, { title: 'Example fresh' });
+			await env.DB.prepare("UPDATE todos SET updated_at = '2026-01-01 00:00:00' WHERE id = ?").bind(old.id).run();
+			await env.DB.prepare("UPDATE todos SET updated_at = '2026-02-01 12:00:00' WHERE id = ?").bind(fresh.id).run();
+
+			expect((await readPage('?updated_since=2026-02-01T12:00:00Z')).todos.map((todo) => todo.id)).toEqual([fresh.id]);
+			expect((await readPage('?updated_since=2026-02-01%2012:00:00')).todos.map((todo) => todo.id)).toEqual([fresh.id]);
+			expect((await readPage('?updated_since=2026-01-01T00:00:00Z')).todos.map((todo) => todo.id).sort()).toEqual([old.id, fresh.id].sort());
+			expect((await readPage('?updated_since=2026-03-01T00:00:00Z')).todos).toEqual([]);
+			expect((await get(`${TODOS}?updated_since=yesterday`, adminHeaders())).status).toBe(400);
+		});
+
+		it('stamps updated_at and deleted_at on delete so a pull after the delete sees it', async () => {
+			const project = await createProject();
+			const todo = await createTodo(project.id);
+			await env.DB.prepare("UPDATE todos SET updated_at = '2026-01-01 00:00:00' WHERE id = ?").bind(todo.id).run();
+			await del(`${TODOS}/${todo.id}`, adminHeaders());
+
+			const page = await readPage('?updated_since=2026-06-01T00:00:00Z&include_deleted=true');
+			expect(page.todos.map((item) => item.id)).toEqual([todo.id]);
+		});
+
+		it('accepts a caller UUID on create and refuses a repeat with 409', async () => {
+			const project = await createProject();
+			const id = crypto.randomUUID();
+			const created = await post(TODOS, { id, project_id: project.id, title: 'Example offline todo' }, adminHeaders());
+			expect(created.status).toBe(201);
+			expect(((await created.json()) as { todo: Todo }).todo.id).toBe(id);
+
+			const repeat = await post(TODOS, { id, project_id: project.id, title: 'Example repeat' }, adminHeaders());
+			expect(repeat.status).toBe(409);
+			// Deleting does not free the id
+			await del(`${TODOS}/${id}`, adminHeaders());
+			expect((await post(TODOS, { id, project_id: project.id, title: 'Example again' }, adminHeaders())).status).toBe(409);
+			expect((await post(TODOS, { id: 'not-a-uuid', project_id: project.id, title: 'Example bad id' }, adminHeaders())).status).toBe(400);
+		});
 	});
 });

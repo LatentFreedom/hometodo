@@ -49,6 +49,17 @@ describe('GET /api/v1/summary', () => {
 		expect(projects).toHaveLength(1);
 	});
 
+	it('ignores deleted todos in counts and soonest due', async () => {
+		const project = await createProject({ name: 'Example house' });
+		const kept = await createTodo(project.id, { due_date: '2026-12-05' });
+		const gone = await createTodo(project.id, { due_date: '2026-12-01' });
+		await del(`${API_BASE_PATH}/todos/${gone.id}`, adminHeaders());
+
+		const { projects } = await readSummary();
+		expect(projects[0]).toMatchObject({ open_count: 1 });
+		expect(projects[0].soonest_due.map((todo) => todo.id)).toEqual([kept.id]);
+	});
+
 	it('counts open, waiting, and done per project', async () => {
 		const house = await createProject({ name: 'Example house', kind: 'house' });
 		const car = await createProject({ name: 'Example car', kind: 'car' });

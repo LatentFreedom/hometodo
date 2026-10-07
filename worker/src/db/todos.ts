@@ -16,9 +16,12 @@ export interface TodoRow {
 	completed_at: string | null;
 	created_at: string;
 	updated_at: string;
+	deleted_at: string | null;
 }
 
 export interface TodoInsert {
+	// A replica may bring its own UUID so both sides share one id from the first sync
+	id?: string;
 	project_id: string;
 	title: string;
 	notes: string | null;
@@ -35,6 +38,9 @@ export interface TodoFilter {
 	status: TodoStatus | null;
 	contactId: string | null;
 	includeArchived: boolean;
+	// Deleted rows and an updated_at floor exist for the sync pull; normal reads use neither
+	includeDeleted: boolean;
+	updatedSince: string | null;
 	after: CursorPosition | null;
 	limit: number;
 }
@@ -60,6 +66,13 @@ export async function listTodos(db: D1Database, filter: TodoFilter): Promise<Tod
 		values.push(filter.contactId);
 	}
 	if (!filter.includeArchived) conditions.push('p.archived_at IS NULL');
+	if (!filter.includeDeleted) conditions.push('t.deleted_at IS NULL');
+	// Inclusive, because updated_at has one-second precision: a row changed in the same
+	// second as the caller's floor must not be skipped. Callers upsert, so a repeat is harmless.
+	if (filter.updatedSince !== null) {
+		conditions.push('t.updated_at >= ?');
+		values.push(filter.updatedSince);
+	}
 	if (filter.after !== null) {
 		conditions.push('(t.created_at > ? OR (t.created_at = ? AND t.id > ?))');
 		values.push(filter.after.createdAt, filter.after.createdAt, filter.after.id);
@@ -73,8 +86,15 @@ export async function listTodos(db: D1Database, filter: TodoFilter): Promise<Tod
 	return result.results;
 }
 
-export function getTodo(db: D1Database, id: string): Promise<TodoRow | null> {
-	return db.prepare('SELECT * FROM todos WHERE id = ?').bind(id).first<TodoRow>();
+/** A deleted todo reads as absent unless the caller asks for it. */
+export function getTodo(db: D1Database, id: string, includeDeleted = false): Promise<TodoRow | null> {
+	const deleted = includeDeleted ? '' : ' AND deleted_at IS NULL';
+	return db.prepare(`SELECT * FROM todos WHERE id = ?${deleted}`).bind(id).first<TodoRow>();
+}
+
+export async function todoIdTaken(db: D1Database, id: string): Promise<boolean> {
+	const row = await db.prepare('SELECT 1 AS hit FROM todos WHERE id = ?').bind(id).first<{ hit: number }>();
+	return row !== null;
 }
 
 export async function externalIdTaken(db: D1Database, source: TodoSource, externalId: string): Promise<boolean> {
@@ -94,7 +114,7 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 			 RETURNING *`,
 		)
 		.bind(
-			crypto.randomUUID(),
+			input.id ?? crypto.randomUUID(),
 			input.project_id,
 			input.title,
 			input.notes,
@@ -129,7 +149,11 @@ export function updateTodo(db: D1Database, id: string, changes: Record<string, V
 	return updateRow<TodoRow>(db, 'todos', id, assignments);
 }
 
+/** Soft delete: the row stays, stamped, so a replica sees the delete on its next pull. */
 export async function deleteTodo(db: D1Database, id: string): Promise<boolean> {
-	const result = await db.prepare('DELETE FROM todos WHERE id = ?').bind(id).run();
+	const result = await db
+		.prepare('UPDATE todos SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL')
+		.bind(id)
+		.run();
 	return result.meta.changes > 0;
 }
