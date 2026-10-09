@@ -22,6 +22,16 @@ export function formatDay(day: string): string {
   return DATE_FORMAT.format(new Date(year, month - 1, date));
 }
 
+const UNIT_NAMES = { day: ['day', 'days'], week: ['week', 'weeks'], month: ['month', 'months'] } as const;
+
+/** "Every week, on a schedule" or "Every 90 days after done"; null when the todo does not repeat. */
+export function describeRepeat(todo: Pick<Todo, 'repeat_mode' | 'repeat_every' | 'repeat_unit'>): string | null {
+  if (!todo.repeat_mode || !todo.repeat_every || !todo.repeat_unit) return null;
+  const [one, many] = UNIT_NAMES[todo.repeat_unit];
+  const period = todo.repeat_every === 1 ? `Every ${one}` : `Every ${todo.repeat_every} ${many}`;
+  return todo.repeat_mode === 'fixed' ? `${period}, on a schedule` : `${period} after done`;
+}
+
 /** The worker stores SQLite timestamps in UTC without a zone marker. */
 export function formatTimestamp(value: string | null): string | null {
   if (!value) return null;

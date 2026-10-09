@@ -1,5 +1,5 @@
 import type { CursorPosition } from '../lib/cursor';
-import type { TodoSource, TodoStatus, Value } from '../lib/validate';
+import type { RepeatMode, RepeatUnit, TodoSource, TodoStatus, Value } from '../lib/validate';
 import { assign, updateRow, type Assignment } from './update';
 
 export interface TodoRow {
@@ -17,6 +17,10 @@ export interface TodoRow {
 	created_at: string;
 	updated_at: string;
 	deleted_at: string | null;
+	repeat_mode: RepeatMode | null;
+	repeat_every: number | null;
+	repeat_unit: RepeatUnit | null;
+	recurs_from_id: string | null;
 }
 
 export interface TodoInsert {
@@ -31,6 +35,10 @@ export interface TodoInsert {
 	contact_id: string | null;
 	source: TodoSource;
 	external_id: string | null;
+	repeat_mode: RepeatMode | null;
+	repeat_every: number | null;
+	repeat_unit: RepeatUnit | null;
+	recurs_from_id?: string | null;
 }
 
 export interface TodoFilter {
@@ -47,7 +55,18 @@ export interface TodoFilter {
 
 // Fields a PATCH may change. source and external_id are provenance from an import and
 // are fixed at create time, which also keeps their uniqueness a create-only check.
-export const TODO_UPDATE_COLUMNS = ['project_id', 'title', 'notes', 'status', 'due_date', 'cost_cents', 'contact_id'] as const;
+export const TODO_UPDATE_COLUMNS = [
+	'project_id',
+	'title',
+	'notes',
+	'status',
+	'due_date',
+	'cost_cents',
+	'contact_id',
+	'repeat_mode',
+	'repeat_every',
+	'repeat_unit',
+] as const;
 
 /** Rows in a stable order, one more than asked for, so the caller can tell if a next page exists. */
 export async function listTodos(db: D1Database, filter: TodoFilter): Promise<TodoRow[]> {
@@ -109,8 +128,9 @@ export async function externalIdTaken(db: D1Database, source: TodoSource, extern
 export async function insertTodo(db: D1Database, input: TodoInsert): Promise<TodoRow> {
 	const row = await db
 		.prepare(
-			`INSERT INTO todos (id, project_id, title, notes, status, due_date, cost_cents, contact_id, source, external_id, completed_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
+			`INSERT INTO todos (id, project_id, title, notes, status, due_date, cost_cents, contact_id, source, external_id,
+			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, completed_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
 			 RETURNING *`,
 		)
 		.bind(
@@ -124,11 +144,44 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 			input.contact_id,
 			input.source,
 			input.external_id,
+			input.repeat_mode,
+			input.repeat_every,
+			input.repeat_unit,
+			input.recurs_from_id ?? null,
 			input.status,
 		)
 		.first<TodoRow>();
 	if (!row) throw new Error('todo insert returned no row');
 	return row;
+}
+
+/**
+ * The open todo that follows a finished repeating one. INSERT OR IGNORE against the
+ * unique recurs_from_id index means a todo gets at most one successor, so finishing it a
+ * second time (or two clients finishing it at once) returns null instead of a duplicate.
+ */
+export async function insertNextOccurrence(db: D1Database, finished: TodoRow, dueDate: string): Promise<TodoRow | null> {
+	return db
+		.prepare(
+			`INSERT OR IGNORE INTO todos (id, project_id, title, notes, status, due_date, cost_cents, contact_id, source,
+			   repeat_mode, repeat_every, repeat_unit, recurs_from_id)
+			 VALUES (?, ?, ?, ?, 'open', ?, ?, ?, 'manual', ?, ?, ?, ?)
+			 RETURNING *`,
+		)
+		.bind(
+			crypto.randomUUID(),
+			finished.project_id,
+			finished.title,
+			finished.notes,
+			dueDate,
+			finished.cost_cents,
+			finished.contact_id,
+			finished.repeat_mode,
+			finished.repeat_every,
+			finished.repeat_unit,
+			finished.id,
+		)
+		.first<TodoRow>();
 }
 
 /**

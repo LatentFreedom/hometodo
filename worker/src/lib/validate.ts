@@ -9,16 +9,21 @@ import { badRequest } from './http';
 export const PROJECT_KINDS = ['house', 'car', 'family', 'admin', 'networking', 'other'] as const;
 export const TODO_STATUSES = ['open', 'waiting', 'done'] as const;
 export const TODO_SOURCES = ['manual', 'reminders'] as const;
+export const REPEAT_MODES = ['fixed', 'after_done'] as const;
+export const REPEAT_UNITS = ['day', 'week', 'month'] as const;
 
 export type ProjectKind = (typeof PROJECT_KINDS)[number];
 export type TodoStatus = (typeof TODO_STATUSES)[number];
 export type TodoSource = (typeof TODO_SOURCES)[number];
+export type RepeatMode = (typeof REPEAT_MODES)[number];
+export type RepeatUnit = (typeof REPEAT_UNITS)[number];
 
 export type Field =
 	| { type: 'text'; max: number; required?: boolean }
-	| { type: 'enum'; values: readonly string[] }
+	| { type: 'enum'; values: readonly string[]; nullable?: boolean }
 	| { type: 'date' }
 	| { type: 'cents' }
+	| { type: 'count'; max: number }
 	| { type: 'email' }
 	| { type: 'ref' }
 	| { type: 'boolean' };
@@ -77,7 +82,8 @@ function parseValue(key: string, raw: unknown, field: Field): Value {
 			return text;
 		}
 		case 'enum': {
-			// The enum columns are NOT NULL, so null is not a way to reset one.
+			// Most enum columns are NOT NULL, so null resets only one that says it may
+			if (raw === null && field.nullable) return null;
 			if (typeof raw !== 'string' || !field.values.includes(raw)) {
 				throw badRequest(`${key} must be one of: ${field.values.join(', ')}`, key);
 			}
@@ -94,6 +100,13 @@ function parseValue(key: string, raw: unknown, field: Field): Value {
 			if (raw === null) return null;
 			if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 0) {
 				throw badRequest(`${key} must be a whole, non-negative number of cents`, key);
+			}
+			return raw;
+		}
+		case 'count': {
+			if (raw === null) return null;
+			if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 1 || raw > field.max) {
+				throw badRequest(`${key} must be a whole number from 1 to ${field.max}`, key);
 			}
 			return raw;
 		}

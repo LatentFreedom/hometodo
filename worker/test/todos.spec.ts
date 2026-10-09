@@ -353,3 +353,136 @@ describe('todo list and pagination', () => {
 		});
 	});
 });
+
+describe('repeating todos', () => {
+	beforeEach(resetDatabase);
+
+	interface Reply {
+		todo: Todo;
+		next_todo: Todo | null;
+	}
+
+	const WEEKLY = { repeat_mode: 'fixed', repeat_every: 1, repeat_unit: 'week' };
+
+	async function done(id: string, extra: Record<string, unknown> = {}): Promise<Reply> {
+		const response = await patch(`${TODOS}/${id}`, { status: 'done', ...extra }, adminHeaders());
+		expect(response.status).toBe(200);
+		return (await response.json()) as Reply;
+	}
+
+	async function successors(id: string): Promise<number> {
+		const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM todos WHERE recurs_from_id = ?').bind(id).first<{ n: number }>();
+		return row?.n ?? 0;
+	}
+
+	it('stores a rule on create and on update', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, { due_date: '2026-10-06', ...WEEKLY });
+		expect(todo).toMatchObject({ ...WEEKLY, recurs_from_id: null });
+
+		const response = await patch(`${TODOS}/${todo.id}`, { repeat_every: 2 }, adminHeaders());
+		expect(await response.json()).toMatchObject({ todo: { repeat_mode: 'fixed', repeat_every: 2, repeat_unit: 'week' } });
+	});
+
+	it('finishing a fixed todo creates one open successor with the same rule', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, { title: 'Take trash out', notes: 'Bins to the curb', due_date: '2026-10-06', ...WEEKLY });
+
+		const reply = await done(todo.id);
+		expect(reply.todo.status).toBe('done');
+		expect(reply.next_todo).toMatchObject({
+			title: 'Take trash out',
+			notes: 'Bins to the curb',
+			project_id: project.id,
+			status: 'open',
+			completed_at: null,
+			recurs_from_id: todo.id,
+			...WEEKLY,
+		});
+		// Still a Tuesday, and never in the past
+		const due = reply.next_todo?.due_date as string;
+		expect(new Date(`${due}T00:00:00Z`).getUTCDay()).toBe(2);
+		expect(due > '2026-10-06').toBe(true);
+	});
+
+	it('after_done sets the successor due one period after today', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, { repeat_mode: 'after_done', repeat_every: 90, repeat_unit: 'day' });
+		const reply = await done(todo.id);
+		expect(reply.next_todo?.due_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		const days = (Date.parse(`${reply.next_todo?.due_date}T00:00:00Z`) - Date.now()) / 86_400_000;
+		expect(days).toBeGreaterThan(88);
+		expect(days).toBeLessThan(91);
+	});
+
+	it('reopening and finishing again leaves exactly one successor', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, { due_date: '2026-10-06', ...WEEKLY });
+		expect((await done(todo.id)).next_todo).not.toBeNull();
+		await patch(`${TODOS}/${todo.id}`, { status: 'open' }, adminHeaders());
+		expect((await done(todo.id)).next_todo).toBeNull();
+		expect(await successors(todo.id)).toBe(1);
+	});
+
+	it('a sync client resending status done on every PATCH makes no extra successor', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, { due_date: '2026-10-06', ...WEEKLY });
+		await done(todo.id);
+		const again = await done(todo.id, { title: 'Take trash out', ...WEEKLY, due_date: '2026-10-06' });
+		expect(again.next_todo).toBeNull();
+		expect(await successors(todo.id)).toBe(1);
+	});
+
+	it('a todo created already done with a rule spawns its successor', async () => {
+		const project = await createProject();
+		const response = await post(
+			TODOS,
+			{ id: crypto.randomUUID(), project_id: project.id, title: 'Change furnace filter', status: 'done', repeat_mode: 'after_done', repeat_every: 3, repeat_unit: 'month' },
+			adminHeaders(),
+		);
+		expect(response.status).toBe(201);
+		const body = (await response.json()) as Reply;
+		expect(body.next_todo).toMatchObject({ status: 'open', recurs_from_id: body.todo.id });
+	});
+
+	it('a todo without a rule returns next_todo null and makes nothing', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id);
+		expect((await done(todo.id)).next_todo).toBeNull();
+		expect(await successors(todo.id)).toBe(0);
+	});
+
+	it('refuses a partial rule, naming the field', async () => {
+		const project = await createProject();
+		const response = await post(TODOS, { project_id: project.id, title: 'Example', repeat_mode: 'after_done' }, adminHeaders());
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ field: 'repeat_every' });
+	});
+
+	it('refuses a fixed rule without a due date, on create and when the due date is cleared', async () => {
+		const project = await createProject();
+		const response = await post(TODOS, { project_id: project.id, title: 'Example', ...WEEKLY }, adminHeaders());
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ field: 'due_date' });
+
+		const todo = await createTodo(project.id, { due_date: '2026-10-06', ...WEEKLY });
+		const cleared = await patch(`${TODOS}/${todo.id}`, { due_date: null }, adminHeaders());
+		expect(cleared.status).toBe(400);
+	});
+
+	it('refuses a repeat count below 1 or not whole', async () => {
+		const project = await createProject();
+		for (const every of [0, 1.5, '2']) {
+			const response = await post(TODOS, { project_id: project.id, title: 'Example', repeat_mode: 'after_done', repeat_every: every, repeat_unit: 'day' }, adminHeaders());
+			expect(response.status).toBe(400);
+		}
+	});
+
+	it('clearing the rule stops future repeats', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, { due_date: '2026-10-06', ...WEEKLY });
+		const cleared = await patch(`${TODOS}/${todo.id}`, { repeat_mode: null, repeat_every: null, repeat_unit: null }, adminHeaders());
+		expect(await cleared.json()).toMatchObject({ todo: { repeat_mode: null, repeat_every: null, repeat_unit: null } });
+		expect((await done(todo.id)).next_todo).toBeNull();
+	});
+});

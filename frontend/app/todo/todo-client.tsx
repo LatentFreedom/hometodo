@@ -14,17 +14,33 @@ import {
   updateTodo,
   type Contact,
   type Project,
+  type RepeatMode,
+  type RepeatUnit,
   type Todo,
   type TodoPatch,
   type TodoStatus,
 } from '../../lib/api';
-import { formatCost, formatDay, formatTimestamp, isOverdue, parseDollars } from '../../lib/todo-format';
+import { describeRepeat, formatCost, formatDay, formatTimestamp, isOverdue, parseDollars } from '../../lib/todo-format';
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
   { value: 'open', label: 'Open' },
   { value: 'waiting', label: 'Waiting' },
   { value: 'done', label: 'Done' },
 ];
+
+const REPEAT_MODES: { value: RepeatMode | ''; label: string }[] = [
+  { value: '', label: 'Does not repeat' },
+  { value: 'fixed', label: 'On a schedule (from the due date)' },
+  { value: 'after_done', label: 'After it is done' },
+];
+
+const REPEAT_UNITS: { value: RepeatUnit; label: string }[] = [
+  { value: 'day', label: 'day(s)' },
+  { value: 'week', label: 'week(s)' },
+  { value: 'month', label: 'month(s)' },
+];
+
+const MAX_REPEAT_EVERY = 366;
 
 const INPUT = 'w-full rounded border border-border bg-input px-3 py-2 text-foreground';
 const PRIMARY = 'rounded border border-foreground bg-foreground px-3 py-2 text-background disabled:opacity-50';
@@ -38,6 +54,9 @@ interface Draft {
   cost: string;
   contact_id: string;
   project_id: string;
+  repeat_mode: RepeatMode | '';
+  repeat_every: string;
+  repeat_unit: RepeatUnit;
 }
 
 function toDraft(todo: Todo): Draft {
@@ -49,6 +68,9 @@ function toDraft(todo: Todo): Draft {
     cost: todo.cost_cents === null ? '' : (todo.cost_cents / 100).toFixed(2),
     contact_id: todo.contact_id ?? '',
     project_id: todo.project_id,
+    repeat_mode: todo.repeat_mode ?? '',
+    repeat_every: String(todo.repeat_every ?? 1),
+    repeat_unit: todo.repeat_unit ?? 'week',
   };
 }
 
@@ -69,6 +91,17 @@ function diff(todo: Todo, draft: Draft): TodoPatch | string {
   const contact = draft.contact_id || null;
   if (contact !== todo.contact_id) changes.contact_id = contact;
   if (draft.project_id !== todo.project_id) changes.project_id = draft.project_id;
+  // The worker takes the three repeat fields together, so any change sends all three
+  if (draft.repeat_mode === '') {
+    if (todo.repeat_mode !== null) Object.assign(changes, { repeat_mode: null, repeat_every: null, repeat_unit: null });
+  } else {
+    const every = Number(draft.repeat_every);
+    if (!Number.isInteger(every) || every < 1 || every > MAX_REPEAT_EVERY) return `Repeat every must be a whole number from 1 to ${MAX_REPEAT_EVERY}.`;
+    if (draft.repeat_mode === 'fixed' && !due) return 'A repeat on a schedule needs a due date to count from.';
+    if (draft.repeat_mode !== todo.repeat_mode || every !== todo.repeat_every || draft.repeat_unit !== todo.repeat_unit) {
+      Object.assign(changes, { repeat_mode: draft.repeat_mode, repeat_every: every, repeat_unit: draft.repeat_unit });
+    }
+  }
   return changes;
 }
 
@@ -92,6 +125,7 @@ export function TodoClient() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [nextTodo, setNextTodo] = useState<Todo | null>(null);
 
   // A rejected key mid-session means the key was rotated: drop it and let the gate ask again.
   const handleError = useCallback((err: unknown, fallback: string) => {
@@ -141,7 +175,8 @@ export function TodoClient() {
       setBusy(true);
       setError(null);
       try {
-        const { todo: saved } = await updateTodo(todo.id, changes);
+        const { todo: saved, next_todo: next } = await updateTodo(todo.id, changes);
+        if (next) setNextTodo(next);
         if (changes.project_id) {
           router.push(`/project/?id=${encodeURIComponent(saved.project_id)}`);
           return;
@@ -266,6 +301,46 @@ export function TodoClient() {
               </select>
             </label>
             <label className="flex flex-col gap-1 sm:col-span-2">
+              <span className="text-sm">Repeat</span>
+              <select
+                className={INPUT}
+                value={draft.repeat_mode}
+                onChange={(event) => setDraft({ ...draft, repeat_mode: event.target.value as RepeatMode | '' })}
+              >
+                {REPEAT_MODES.map((mode) => (
+                  <option key={mode.value} value={mode.value}>
+                    {mode.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {draft.repeat_mode !== '' ? (
+              <>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm">Every</span>
+                  <input
+                    className={INPUT}
+                    type="number"
+                    min={1}
+                    max={MAX_REPEAT_EVERY}
+                    inputMode="numeric"
+                    value={draft.repeat_every}
+                    onChange={(event) => setDraft({ ...draft, repeat_every: event.target.value })}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm">Unit</span>
+                  <select className={INPUT} value={draft.repeat_unit} onChange={(event) => setDraft({ ...draft, repeat_unit: event.target.value as RepeatUnit })}>
+                    {REPEAT_UNITS.map((unit) => (
+                      <option key={unit.value} value={unit.value}>
+                        {unit.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+            <label className="flex flex-col gap-1 sm:col-span-2">
               <span className="text-sm">Project</span>
               <select className={INPUT} value={draft.project_id} onChange={(event) => setDraft({ ...draft, project_id: event.target.value })}>
                 {projects.map((candidate) => (
@@ -326,6 +401,15 @@ export function TodoClient() {
             </div>
           </div>
 
+          {nextTodo ? (
+            <p className="rounded border border-border bg-card p-3 text-sm">
+              Next one made{nextTodo.due_date ? `, due ${formatDay(nextTodo.due_date)}` : ''}.{' '}
+              <Link href={`/todo/?id=${encodeURIComponent(nextTodo.id)}`} className="underline underline-offset-4">
+                Open it
+              </Link>
+            </p>
+          ) : null}
+
           <section className="rounded border border-border bg-card p-4">
             <h2 className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Notes</h2>
             {todo.notes ? (
@@ -346,6 +430,7 @@ export function TodoClient() {
                 <span className="text-muted-foreground">No due date</span>
               )}
             </Field>
+            <Field label="Repeats">{describeRepeat(todo) ?? <span className="text-muted-foreground">Does not repeat</span>}</Field>
             <Field label="Cost">{formatCost(todo.cost_cents) ?? <span className="text-muted-foreground">Not set</span>}</Field>
             <Field label="Contact">
               {contact ? (

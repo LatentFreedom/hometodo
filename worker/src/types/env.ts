@@ -11,4 +11,6 @@ export interface Env {
 	ALLOWED_ORIGINS: string;
 	/** Public base URL of the site this worker serves. Non-secret. */
 	FRONTEND_URL: string;
+	/** IANA zone that decides "today" for repeating todos. Non-secret; lives in wrangler.jsonc vars. */
+	HOME_TZ: string;
 }

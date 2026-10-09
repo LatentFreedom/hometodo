@@ -52,6 +52,7 @@
 	 */
 	"vars": {
 		"FRONTEND_URL": "https://home.imnotbot.com",
+		"HOME_TZ": "America/Indiana/Indianapolis",
 		"ALLOWED_ORIGINS": "https://home.imnotbot.com,https://hometodo.pages.dev,http://localhost:3000,http://127.0.0.1:3000"
 	}
 }

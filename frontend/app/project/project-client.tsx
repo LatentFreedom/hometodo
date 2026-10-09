@@ -14,7 +14,7 @@ import {
   type Todo,
   type TodoStatus,
 } from '../../lib/api';
-import { formatCost, formatDay, isOverdue, notesPreview } from '../../lib/todo-format';
+import { describeRepeat, formatCost, formatDay, isOverdue, notesPreview } from '../../lib/todo-format';
 
 // A done todo stays visible for this long, then disappears from the collapsed
 // section entirely (the API never deletes it - this is a display-only cutoff).
@@ -112,7 +112,7 @@ function TodoRow({
 }: {
   todo: Todo;
   contacts: Contact[];
-  onChange: (todo: Todo) => void;
+  onChange: (todo: Todo, next: Todo | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,8 +122,8 @@ function TodoRow({
       setBusy(true);
       setError(null);
       try {
-        const { todo: saved } = await updateTodo(todo.id, { status });
-        onChange(saved);
+        const { todo: saved, next_todo: next } = await updateTodo(todo.id, { status });
+        onChange(saved, next);
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not save the todo.');
       } finally {
@@ -138,7 +138,9 @@ function TodoRow({
   const preview = notesPreview(todo.notes);
   const cost = formatCost(todo.cost_cents);
   const overdue = isOverdue(todo);
+  const repeat = describeRepeat(todo);
   const meta = [
+    repeat ? { key: 'repeat', text: `↻ ${repeat}`, danger: false } : null,
     todo.due_date ? { key: 'due', text: `Due ${formatDay(todo.due_date)}${overdue ? ' (overdue)' : ''}`, danger: overdue } : null,
     linkedContact ? { key: 'contact', text: linkedContact, danger: false } : null,
     cost ? { key: 'cost', text: cost, danger: false } : null,
@@ -232,8 +234,12 @@ export function ProjectClient() {
     };
   }, [id]);
 
-  const onTodoChanged = useCallback((updated: Todo) => {
-    setTodos((current) => (current ?? []).map((todo) => (todo.id === updated.id ? updated : todo)));
+  // Finishing a repeating todo also returns the next occurrence, so it shows without a reload
+  const onTodoChanged = useCallback((updated: Todo, next: Todo | null = null) => {
+    setTodos((current) => {
+      const list = (current ?? []).map((todo) => (todo.id === updated.id ? updated : todo));
+      return next && next.project_id === updated.project_id && !list.some((todo) => todo.id === next.id) ? [...list, next] : list;
+    });
   }, []);
 
   const groups = useMemo(() => {

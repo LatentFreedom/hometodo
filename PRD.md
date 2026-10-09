@@ -42,6 +42,9 @@ or `done`. `waiting` is deliberate and load-bearing: most household work is bloc
 on somebody else, and a tracker that only has open and done cannot tell "I have not
 started" from "I am waiting for a quote". A todo can carry a due date, an expected
 or actual cost in cents, and a link to the contact responsible for it.
+A todo can also repeat: on a schedule counted from its due date (trash night every
+Tuesday), or a set time after it is finished (the furnace filter 90 days later).
+Finishing a repeating todo makes the next one on the server, so every client gets it.
 
 **Contact** - a person or business tied to the work. A roofer, a mechanic, a county
 office, a neighbour. Name, role, phone, email, and free notes.

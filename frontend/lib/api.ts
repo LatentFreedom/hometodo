@@ -77,6 +77,9 @@ export interface Project {
   updated_at: string;
 }
 
+export type RepeatMode = 'fixed' | 'after_done';
+export type RepeatUnit = 'day' | 'week' | 'month';
+
 export interface Todo {
   id: string;
   project_id: string;
@@ -91,6 +94,16 @@ export interface Todo {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  repeat_mode: RepeatMode | null;
+  repeat_every: number | null;
+  repeat_unit: RepeatUnit | null;
+  recurs_from_id: string | null;
+}
+
+/** POST and PATCH answer with the todo and, when finishing a repeating one, the occurrence it made. */
+export interface TodoReply {
+  todo: Todo;
+  next_todo: Todo | null;
 }
 
 export interface Contact {
@@ -181,12 +194,15 @@ export interface TodoInput {
   status?: TodoStatus;
 }
 
-export function createTodo(input: TodoInput): Promise<{ todo: Todo }> {
+export function createTodo(input: TodoInput): Promise<TodoReply> {
   return apiJson('/api/v1/todos', { method: 'POST', body: JSON.stringify(input) });
 }
 
 export type TodoPatch = Partial<
-  Pick<Todo, 'title' | 'notes' | 'status' | 'due_date' | 'cost_cents' | 'contact_id' | 'project_id'>
+  Pick<
+    Todo,
+    'title' | 'notes' | 'status' | 'due_date' | 'cost_cents' | 'contact_id' | 'project_id' | 'repeat_mode' | 'repeat_every' | 'repeat_unit'
+  >
 >;
 
 export function fetchTodo(id: string): Promise<{ todo: Todo }> {
@@ -197,7 +213,7 @@ export function deleteTodo(id: string): Promise<void> {
   return apiJson(`/api/v1/todos/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export function updateTodo(id: string, changes: TodoPatch): Promise<{ todo: Todo }> {
+export function updateTodo(id: string, changes: TodoPatch): Promise<TodoReply> {
   return apiJson(`/api/v1/todos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) });
 }
 

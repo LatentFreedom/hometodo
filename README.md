@@ -208,9 +208,9 @@ Bodies are JSON, and every response is JSON except a `204`.
 | `PATCH` | `/api/v1/projects/:id` | Change `name`, `kind`, `notes`, or `archived` (`true` or `false`). |
 | `DELETE` | `/api/v1/projects/:id` | Archive. Projects are never deleted; `PATCH {"archived":false}` restores. |
 | `GET` | `/api/v1/todos` | Todos in creation order, paged. See below. Sync pulls add `?updated_since=<UTC stamp>&include_deleted=true`. |
-| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201`. |
+| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, the repeat rule, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201` with `{todo, next_todo}`. |
 | `GET` | `/api/v1/todos/:id` | One todo. Deleted todos are `404` unless `?include_deleted=true`. |
-| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `cost_cents`, or `contact_id`. |
+| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, or the repeat rule. Returns `{todo, next_todo}`. |
 | `DELETE` | `/api/v1/todos/:id` | Soft delete: stamps `deleted_at`, hides the row from every normal read. Returns `204`. |
 | `GET` | `/api/v1/contacts` | All contacts, by name. |
 | `POST` | `/api/v1/contacts` | Create: `name` (required), `role`, `phone`, `email`, `notes`. Returns `201`. |
@@ -221,7 +221,7 @@ Bodies are JSON, and every response is JSON except a `204`.
 
 Rules the API enforces:
 
-- Ids are UUIDs made by the server. A client never chooses one.
+- Ids are UUIDs. The server makes one unless a replica sends its own `id` on create.
 - `kind` is one of `house`, `car`, `family`, `admin`, `networking`, `other`, and
   `status` is one of `open`, `waiting`, `done`. Anything else is a `400`.
 - `due_date` is a real calendar day as `YYYY-MM-DD`. `cost_cents` is a whole,
@@ -231,6 +231,15 @@ Rules the API enforces:
   contact is a `400` that names the field. A second todo with the same `source` and
   `external_id` is a `409`. A missing record is a `404`.
 - Send `null` to clear an optional field.
+- A repeat rule is `repeat_mode` (`fixed` or `after_done`), `repeat_every` (1 to 366),
+  and `repeat_unit` (`day`, `week`, `month`), all three or all `null`. `fixed` needs a
+  `due_date`: the next due date is that date plus whole periods, first one after today,
+  and a monthly rule keeps its day of month (clamped in short months). `after_done`
+  counts one period from today. "Today" is the date in `HOME_TZ`.
+- When a todo with a rule moves to `done` (or is created already `done`), the server
+  makes the next open todo with the same fields and rule and `recurs_from_id` set, and
+  returns it as `next_todo`; otherwise `next_todo` is `null`. A todo gets at most one
+  successor, so reopening and finishing it again makes nothing new.
 
 `GET /api/v1/todos` takes `project_id`, `status`, and `contact_id` filters, and hides
 todos of archived projects unless `include_archived=true`. It returns
