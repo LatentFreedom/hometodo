@@ -22,6 +22,24 @@ export function formatDay(day: string): string {
   return DATE_FORMAT.format(new Date(year, month - 1, date));
 }
 
+const SHORT_DAY = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** "Today", "Tomorrow", "Sat" within the week, "Nov 28" further out, "3 days late" when past. */
+export function relativeDue(day: string, today: string = todayLocal()): string {
+  const [year, month, date] = day.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  if (!year || !month || !date || !ty || !tm || !td) return day;
+  const target = new Date(year, month - 1, date);
+  const days = Math.round((target.getTime() - new Date(ty, tm - 1, td).getTime()) / DAY_MS);
+  if (days < 0) return days === -1 ? '1 day late' : `${-days} days late`;
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days < 7) return WEEKDAY.format(target);
+  return SHORT_DAY.format(target);
+}
+
 const UNIT_NAMES = { day: ['day', 'days'], week: ['week', 'weeks'], month: ['month', 'months'] } as const;
 
 /** "Every week, on a schedule" or "Every 90 days after done"; null when the todo does not repeat. */

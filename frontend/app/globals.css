@@ -3,41 +3,54 @@
 @tailwind utilities;
 
 /*
- * Theme tokens: near-black ground in dark, thin 1px borders, neutral chrome.
- * Every surface color is a CSS variable so light/dark switch in one place;
- * components reference the semantic Tailwind classes (bg-background,
- * text-foreground, bg-card, border-border...), never a hardcoded gray or hex value.
+ * Theme tokens: warm ivory and ink in light, deep charcoal in dark, one brass accent,
+ * and hairline borders. Every surface color is a CSS variable so light/dark switch in
+ * one place; components reference the semantic Tailwind classes (bg-background,
+ * text-foreground, bg-card, border-border, text-accent...), never a hardcoded hex value.
+ * Rust (danger) is kept for overdue and destructive actions only, so it stays a signal.
  */
 @layer base {
   :root {
     color-scheme: light dark;
-    --background: 250 250 250; /* neutral-50 */
-    --foreground: 23 23 23; /* neutral-900 */
+    --background: 246 243 237; /* ivory */
+    --foreground: 29 28 26; /* ink */
     --card: 255 255 255;
-    --card-foreground: 23 23 23;
-    --border: 212 212 212; /* neutral-300 */
+    --card-foreground: 29 28 26;
+    --border: 228 222 211;
+    --divider: 239 234 225;
     --input: 255 255 255;
-    --muted: 245 245 245; /* neutral-100 */
-    --muted-foreground: 115 115 115; /* neutral-500 */
-    --ring: 23 23 23; /* neutral-900 */
-    --danger: 220 38 38; /* red-600 */
+    --muted: 237 231 219;
+    --muted-foreground: 110 106 98;
+    --subtle: 138 133 123; /* idle status rings: decoration, not text */
+    --ring: 140 107 46;
+    --accent: 140 107 46; /* brass */
+    --accent-soft: 241 234 219;
+    --danger: 164 71 44; /* rust */
   }
 
   .dark {
     color-scheme: dark;
-    --background: 10 10 10; /* near-black */
-    --foreground: 229 229 229; /* neutral-200 */
-    --card: 17 17 17;
-    --card-foreground: 229 229 229;
-    --border: 38 38 38; /* neutral-800 */
-    --input: 23 23 23;
-    --muted: 23 23 23;
-    --muted-foreground: 163 163 163; /* neutral-400 */
-    --ring: 229 229 229;
-    --danger: 248 113 113; /* red-400 */
+    --background: 18 17 16;
+    --foreground: 237 232 223;
+    --card: 27 26 24;
+    --card-foreground: 237 232 223;
+    --border: 44 42 38;
+    --divider: 38 36 32;
+    --input: 27 26 24;
+    --muted: 36 34 30;
+    --muted-foreground: 156 150 139;
+    --subtle: 138 132 122;
+    --ring: 201 164 100;
+    --accent: 201 164 100;
+    --accent-soft: 42 37 27;
+    --danger: 224 138 109;
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background font-sans text-[15px] text-foreground antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 }

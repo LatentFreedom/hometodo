@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Cormorant_Garamond, Inter } from 'next/font/google';
 import { AccessGate } from '../components/access-gate';
 import { ThemeProvider } from '../components/theme-provider';
 import './globals.css';
@@ -11,13 +12,18 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 };
 
+// next/font downloads both at build time and serves them from this origin, so a page
+// view never calls Google.
+const sans = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const display = Cormorant_Garamond({ subsets: ['latin'], weight: ['500', '600'], variable: '--font-display', display: 'swap' });
+
 // Runs before paint to set the theme class, preventing a light/dark flash.
 // First-visit follows the OS preference when one is available.
 const NO_FLASH_THEME_SCRIPT = `(function(){try{var saved=localStorage.getItem('theme');var dark=saved?saved==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',dark);}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${sans.variable} ${display.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
       </head>

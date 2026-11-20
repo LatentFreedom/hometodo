@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Icon, KindIcon, type IconName } from '../../components/icons';
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, CARD, INPUT, LABEL } from '../../components/ui';
 import { LinkedText } from '../../components/linked-text';
 import {
   ApiError,
@@ -42,9 +44,6 @@ const REPEAT_UNITS: { value: RepeatUnit; label: string }[] = [
 
 const MAX_REPEAT_EVERY = 366;
 
-const INPUT = 'w-full rounded border border-border bg-input px-3 py-2 text-foreground';
-const PRIMARY = 'rounded border border-foreground bg-foreground px-3 py-2 text-background disabled:opacity-50';
-const SECONDARY = 'rounded border border-border px-3 py-2 disabled:opacity-50';
 
 interface Draft {
   title: string;
@@ -105,18 +104,23 @@ function diff(todo: Todo, draft: Draft): TodoPatch | string {
   return changes;
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, icon, children }: { label: string; icon: IconName; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+    <div className="flex items-start gap-3 border-b border-divider px-5 py-4">
+      <Icon name={icon} className="mt-0.5 text-subtle" />
+      <div className="flex min-w-0 flex-col gap-1">
+        <dt className={LABEL}>{label}</dt>
+        <dd className="min-w-0 break-words">{children}</dd>
+      </div>
     </div>
   );
 }
 
 export function TodoClient() {
   const router = useRouter();
-  const [id, setId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const rawId = searchParams.get('id');
+  const id = rawId && rawId.trim() !== '' ? rawId : null;
   const [todo, setTodo] = useState<Todo | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -141,16 +145,17 @@ export function TodoClient() {
     setError(err instanceof ApiError ? err.message : fallback);
   }, []);
 
-  useEffect(() => {
-    const real = new URLSearchParams(window.location.search).get('id');
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the id from the browser URL
-    setId(real && real.trim() !== '' ? real : null);
-    if (!real) setNotFound(true);
-  }, []);
-
+  // The "Open it" link on a repeating todo moves to another id without remounting this page
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
+    /* eslint-disable react-hooks/set-state-in-effect -- reset before loading another todo */
+    setTodo(null);
+    setNextTodo(null);
+    setEditing(false);
+    setNotFound(false);
+    setError(null);
+    /* eslint-enable react-hooks/set-state-in-effect */
     Promise.all([fetchTodo(id), fetchProjects(), fetchContacts()])
       .then(([todoResult, projectsResult, contactsResult]) => {
         if (cancelled) return;
@@ -205,13 +210,13 @@ export function TodoClient() {
     }
   }
 
-  if (notFound) {
+  if (!id || notFound) {
     return (
-      <main className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-8">
-        <h1 className="text-2xl font-semibold">Todo not found</h1>
+      <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-12 sm:px-8">
+        <h1 className="font-display text-4xl font-medium">Todo not found</h1>
         <p className="text-muted-foreground">It may have been deleted, or the link is incomplete.</p>
-        <Link href="/" className="underline underline-offset-4">
-          Back to all projects
+        <Link href="/" className="text-sm text-accent hover:underline">
+          Back to the overview
         </Link>
       </main>
     );
@@ -219,7 +224,7 @@ export function TodoClient() {
 
   if (!todo) {
     return (
-      <main className="mx-auto max-w-2xl px-4 py-8">
+      <main className="mx-auto max-w-3xl px-4 py-12 sm:px-8">
         {error ? <p className="text-sm text-danger">{error}</p> : <p className="text-sm text-muted-foreground">Loading...</p>}
       </main>
     );
@@ -230,237 +235,284 @@ export function TodoClient() {
   const overdue = isOverdue(todo);
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-8">
-      <Link href={`/project/?id=${encodeURIComponent(todo.project_id)}`} className="self-start text-sm underline underline-offset-4">
-        {project ? `Back to ${project.name}` : 'Back to the project'}
-      </Link>
-
-      {editing && draft ? (
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(event: FormEvent<HTMLFormElement>) => {
-            event.preventDefault();
-            const changes = diff(todo, draft);
-            if (typeof changes === 'string') {
-              setError(changes);
-              return;
-            }
-            void save(changes);
-          }}
+    <main className="px-4 pb-16 pt-6 sm:px-8 lg:px-16 lg:pt-10">
+      <div className="mx-auto flex max-w-3xl flex-col gap-8">
+        <Link
+          href={`/project/?id=${encodeURIComponent(todo.project_id)}`}
+          className="inline-flex min-h-11 items-center gap-2 self-start text-[13px] text-muted-foreground hover:text-foreground"
         >
-          <label className="flex flex-col gap-1">
-            <span className="text-sm">Title</span>
-            <input className={INPUT} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required />
-          </label>
+          <Icon name="arrowLeft" size={16} />
+          {project ? (
+            <span className="inline-flex items-center gap-1.5">
+              <KindIcon kind={project.kind} size={15} />
+              {project.name}
+            </span>
+          ) : (
+            'Back to the project'
+          )}
+        </Link>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-sm">Notes</span>
-            <textarea
-              className={`${INPUT} min-h-[12rem] font-sans leading-relaxed`}
-              rows={Math.min(24, Math.max(8, draft.notes.split('\n').length + 2))}
-              value={draft.notes}
-              onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
-              placeholder="Details, measurements, quotes, phone numbers..."
-            />
-          </label>
+        {editing && draft ? (
+          <form
+            className="flex flex-col gap-6"
+            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const changes = diff(todo, draft);
+              if (typeof changes === 'string') {
+                setError(changes);
+                return;
+              }
+              void save(changes);
+            }}
+          >
+            <h1 className="font-display text-4xl font-medium">Edit todo</h1>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Status</span>
-              <select className={INPUT} value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TodoStatus })}>
-                {STATUSES.map((status) => (
-                  <option key={status.value} value={status.value}>
-                    {status.label}
-                  </option>
-                ))}
-              </select>
+            <label className="flex flex-col gap-2">
+              <span className={LABEL}>Title</span>
+              <input className={INPUT} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} required />
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Due date</span>
-              <input type="date" className={INPUT} value={draft.due_date} onChange={(event) => setDraft({ ...draft, due_date: event.target.value })} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Cost (dollars)</span>
-              <input
-                className={INPUT}
-                inputMode="decimal"
-                value={draft.cost}
-                onChange={(event) => setDraft({ ...draft, cost: event.target.value })}
-                placeholder="e.g. 125.50"
+
+            <label className="flex flex-col gap-2">
+              <span className={LABEL}>Notes</span>
+              <textarea
+                className={`${INPUT} min-h-[12rem] leading-relaxed`}
+                rows={Math.min(24, Math.max(8, draft.notes.split('\n').length + 2))}
+                value={draft.notes}
+                onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+                placeholder="Details, measurements, quotes, phone numbers..."
               />
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm">Contact</span>
-              <select className={INPUT} value={draft.contact_id} onChange={(event) => setDraft({ ...draft, contact_id: event.target.value })}>
-                <option value="">None</option>
-                {contacts.map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>
-                    {candidate.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 sm:col-span-2">
-              <span className="text-sm">Repeat</span>
-              <select
-                className={INPUT}
-                value={draft.repeat_mode}
-                onChange={(event) => setDraft({ ...draft, repeat_mode: event.target.value as RepeatMode | '' })}
-              >
-                {REPEAT_MODES.map((mode) => (
-                  <option key={mode.value} value={mode.value}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {draft.repeat_mode !== '' ? (
-              <>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm">Every</span>
-                  <input
-                    className={INPUT}
-                    type="number"
-                    min={1}
-                    max={MAX_REPEAT_EVERY}
-                    inputMode="numeric"
-                    value={draft.repeat_every}
-                    onChange={(event) => setDraft({ ...draft, repeat_every: event.target.value })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm">Unit</span>
-                  <select className={INPUT} value={draft.repeat_unit} onChange={(event) => setDraft({ ...draft, repeat_unit: event.target.value as RepeatUnit })}>
-                    {REPEAT_UNITS.map((unit) => (
-                      <option key={unit.value} value={unit.value}>
-                        {unit.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            ) : null}
-            <label className="flex flex-col gap-1 sm:col-span-2">
-              <span className="text-sm">Project</span>
-              <select className={INPUT} value={draft.project_id} onChange={(event) => setDraft({ ...draft, project_id: event.target.value })}>
-                {projects.map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>
-                    {candidate.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" className={PRIMARY} disabled={busy}>
-              {busy ? 'Saving...' : 'Save'}
-            </button>
-            <button
-              type="button"
-              className={SECONDARY}
-              disabled={busy}
-              onClick={() => {
-                setEditing(false);
-                setError(null);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
-        </form>
-      ) : (
-        <>
-          <div className="flex flex-col gap-3">
-            <h1 className={`break-words text-2xl font-semibold ${todo.status === 'done' ? 'text-muted-foreground line-through' : ''}`}>{todo.title}</h1>
-            <div className="flex flex-wrap gap-2">
-              {STATUSES.map((status) => (
-                <button
-                  key={status.value}
-                  type="button"
-                  disabled={busy || todo.status === status.value}
-                  aria-pressed={todo.status === status.value}
-                  className={todo.status === status.value ? PRIMARY : SECONDARY}
-                  onClick={() => void save({ status: status.value })}
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>Status</span>
+                <select className={INPUT} value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value as TodoStatus })}>
+                  {STATUSES.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>Due date</span>
+                <input type="date" className={INPUT} value={draft.due_date} onChange={(event) => setDraft({ ...draft, due_date: event.target.value })} />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>Cost (dollars)</span>
+                <input
+                  className={INPUT}
+                  inputMode="decimal"
+                  value={draft.cost}
+                  onChange={(event) => setDraft({ ...draft, cost: event.target.value })}
+                  placeholder="e.g. 125.50"
+                />
+              </label>
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>Contact</span>
+                <select className={INPUT} value={draft.contact_id} onChange={(event) => setDraft({ ...draft, contact_id: event.target.value })}>
+                  <option value="">None</option>
+                  {contacts.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-2 sm:col-span-2">
+                <span className={LABEL}>Repeat</span>
+                <select
+                  className={INPUT}
+                  value={draft.repeat_mode}
+                  onChange={(event) => setDraft({ ...draft, repeat_mode: event.target.value as RepeatMode | '' })}
                 >
-                  {status.label}
-                </button>
-              ))}
+                  {REPEAT_MODES.map((mode) => (
+                    <option key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {draft.repeat_mode !== '' ? (
+                <>
+                  <label className="flex flex-col gap-2">
+                    <span className={LABEL}>Every</span>
+                    <input
+                      className={INPUT}
+                      type="number"
+                      min={1}
+                      max={MAX_REPEAT_EVERY}
+                      inputMode="numeric"
+                      value={draft.repeat_every}
+                      onChange={(event) => setDraft({ ...draft, repeat_every: event.target.value })}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    <span className={LABEL}>Unit</span>
+                    <select className={INPUT} value={draft.repeat_unit} onChange={(event) => setDraft({ ...draft, repeat_unit: event.target.value as RepeatUnit })}>
+                      {REPEAT_UNITS.map((unit) => (
+                        <option key={unit.value} value={unit.value}>
+                          {unit.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : null}
+              <label className="flex flex-col gap-2 sm:col-span-2">
+                <span className={LABEL}>Project</span>
+                <select className={INPUT} value={draft.project_id} onChange={(event) => setDraft({ ...draft, project_id: event.target.value })}>
+                  {projects.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button type="submit" className={BUTTON_PRIMARY} disabled={busy}>
+                {busy ? 'Saving...' : 'Save'}
+              </button>
               <button
                 type="button"
-                className={SECONDARY}
+                className={BUTTON_SECONDARY}
+                disabled={busy}
                 onClick={() => {
-                  setDraft(toDraft(todo));
+                  setEditing(false);
                   setError(null);
-                  setEditing(true);
                 }}
               >
-                Edit
+                Cancel
               </button>
             </div>
-          </div>
+            {error ? <p className="text-sm text-danger">{error}</p> : null}
+          </form>
+        ) : (
+          <>
+            <div className="flex flex-col gap-5">
+              <h1
+                className={`break-words font-display text-[40px] font-medium leading-[1.1] sm:text-[48px] ${
+                  todo.status === 'done' ? 'text-muted-foreground line-through decoration-subtle decoration-1' : ''
+                }`}
+              >
+                {todo.title}
+              </h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <div role="group" aria-label="Status" className="flex gap-1 rounded-full bg-muted p-1">
+                  {STATUSES.map((status) => (
+                    <button
+                      key={status.value}
+                      type="button"
+                      disabled={busy || todo.status === status.value}
+                      aria-pressed={todo.status === status.value}
+                      onClick={() => void save({ status: status.value })}
+                      className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium transition-colors ${
+                        todo.status === status.value ? 'bg-card text-foreground shadow-sm' : 'text-foreground/70 hover:text-foreground disabled:opacity-50'
+                      }`}
+                    >
+                      <Icon name={status.value} size={16} className={todo.status === status.value ? 'text-accent' : ''} />
+                      {status.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className={BUTTON_SECONDARY}
+                  onClick={() => {
+                    setDraft(toDraft(todo));
+                    setError(null);
+                    setEditing(true);
+                  }}
+                >
+                  <Icon name="pencil" size={16} />
+                  Edit
+                </button>
+              </div>
+            </div>
 
-          {nextTodo ? (
-            <p className="rounded border border-border bg-card p-3 text-sm">
-              Next one made{nextTodo.due_date ? `, due ${formatDay(nextTodo.due_date)}` : ''}.{' '}
-              <Link href={`/todo/?id=${encodeURIComponent(nextTodo.id)}`} className="underline underline-offset-4">
-                Open it
-              </Link>
-            </p>
-          ) : null}
+            {nextTodo ? (
+              <p className="flex flex-wrap items-center gap-2 rounded-2xl bg-accent-soft px-5 py-4 text-sm">
+                <Icon name="repeat" size={16} className="text-accent" />
+                Next one made{nextTodo.due_date ? `, due ${formatDay(nextTodo.due_date)}` : ''}.
+                <Link href={`/todo/?id=${encodeURIComponent(nextTodo.id)}`} className="font-medium text-accent hover:underline">
+                  Open it
+                </Link>
+              </p>
+            ) : null}
 
-          <section className="rounded border border-border bg-card p-4">
-            <h2 className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Notes</h2>
-            {todo.notes ? (
-              <LinkedText text={todo.notes} className="leading-relaxed" />
-            ) : (
-              <p className="text-sm text-muted-foreground">No notes yet. Use Edit to add some.</p>
-            )}
-          </section>
-
-          <dl className="grid grid-cols-1 gap-4 rounded border border-border bg-card p-4 sm:grid-cols-2">
-            <Field label="Due">
-              {todo.due_date ? (
-                <span className={overdue ? 'text-danger' : ''}>
-                  {formatDay(todo.due_date)}
-                  {overdue ? ' (overdue)' : ''}
-                </span>
+            <section className={`${CARD} flex flex-col gap-3 p-5 sm:p-6`}>
+              <h2 className={LABEL}>Notes</h2>
+              {todo.notes ? (
+                <LinkedText text={todo.notes} className="leading-relaxed" />
               ) : (
-                <span className="text-muted-foreground">No due date</span>
+                <p className="text-sm text-muted-foreground">No notes yet. Use Edit to add some.</p>
               )}
-            </Field>
-            <Field label="Repeats">{describeRepeat(todo) ?? <span className="text-muted-foreground">Does not repeat</span>}</Field>
-            <Field label="Cost">{formatCost(todo.cost_cents) ?? <span className="text-muted-foreground">Not set</span>}</Field>
-            <Field label="Contact">
-              {contact ? (
-                <span>
-                  {contact.name}
-                  {contact.role ? <span className="text-muted-foreground"> - {contact.role}</span> : null}
-                  {contact.phone ? (
-                    <a className="block underline underline-offset-4" href={`tel:${contact.phone}`}>
-                      {contact.phone}
-                    </a>
-                  ) : null}
-                </span>
-              ) : (
-                <span className="text-muted-foreground">None</span>
-              )}
-            </Field>
-            <Field label="Project">{project?.name ?? <span className="text-muted-foreground">Unknown</span>}</Field>
-            <Field label="Source">{todo.source === 'reminders' ? 'Imported from Reminders' : 'Added here'}</Field>
-            <Field label="Created">{formatTimestamp(todo.created_at)}</Field>
-            <Field label="Updated">{formatTimestamp(todo.updated_at)}</Field>
-            {todo.completed_at ? <Field label="Completed">{formatTimestamp(todo.completed_at)}</Field> : null}
-          </dl>
+            </section>
 
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+            {/* Every field draws its own bottom rule; -mb-px tucks the last row's rule under the card edge */}
+            <dl className={`${CARD} overflow-hidden`}>
+              <div className="-mb-px grid grid-cols-1 sm:grid-cols-2">
+              <Field label="Due" icon="calendar">
+                {todo.due_date ? (
+                  <span className={overdue ? 'text-danger' : ''}>
+                    {formatDay(todo.due_date)}
+                    {overdue ? ' (overdue)' : ''}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">No due date</span>
+                )}
+              </Field>
+              <Field label="Repeats" icon="repeat">
+                {describeRepeat(todo) ?? <span className="text-muted-foreground">Does not repeat</span>}
+              </Field>
+              <Field label="Cost" icon="cost">
+                {formatCost(todo.cost_cents) ?? <span className="text-muted-foreground">Not set</span>}
+              </Field>
+              <Field label="Contact" icon="contact">
+                {contact ? (
+                  <span>
+                    {contact.name}
+                    {contact.role ? <span className="text-muted-foreground"> - {contact.role}</span> : null}
+                    {contact.phone ? (
+                      <a className="block text-accent hover:underline" href={`tel:${contact.phone}`}>
+                        {contact.phone}
+                      </a>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">None</span>
+                )}
+              </Field>
+              <Field label="Project" icon={project?.kind ?? 'other'}>
+                {project?.name ?? <span className="text-muted-foreground">Unknown</span>}
+              </Field>
+              <Field label="Source" icon="notes">
+                {todo.source === 'reminders' ? 'Imported from Reminders' : 'Added here'}
+              </Field>
+              <Field label="Created" icon="plus">
+                {formatTimestamp(todo.created_at)}
+              </Field>
+              <Field label="Updated" icon="pencil">
+                {formatTimestamp(todo.updated_at)}
+              </Field>
+              {todo.completed_at ? (
+                <Field label="Completed" icon="done">
+                  {formatTimestamp(todo.completed_at)}
+                </Field>
+              ) : null}
+              </div>
+            </dl>
 
-          <button type="button" className="self-start text-sm text-danger underline underline-offset-4 disabled:opacity-50" disabled={busy} onClick={() => void remove()}>
-            Delete this todo
-          </button>
-        </>
-      )}
+            {error ? <p className="text-sm text-danger">{error}</p> : null}
+
+            <button type="button" className="self-start text-sm text-danger underline-offset-4 hover:underline disabled:opacity-50" disabled={busy} onClick={() => void remove()}>
+              Delete this todo
+            </button>
+          </>
+        )}
+      </div>
     </main>
   );
 }

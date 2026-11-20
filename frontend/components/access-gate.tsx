@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { clearSavedKey, readSavedKey, saveKey, verifyKey } from '../lib/api';
-import { SiteHeader } from './site-header';
+import { AppShell } from './app-shell';
+import { Icon } from './icons';
+import { BUTTON_PRIMARY, BUTTON_QUIET, INPUT, LABEL } from './ui';
 
 type GateState = 'checking' | 'locked' | 'unlocked';
 
@@ -82,70 +84,69 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
   if (state === 'checking') {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <p className="text-sm text-muted-foreground">Checking access...</p>
+      <main className="flex min-h-screen items-center justify-center">
+        <Icon name="house" size={28} className="animate-pulse text-accent" />
+        <span className="sr-only">Checking access...</span>
       </main>
     );
   }
 
   if (state === 'locked' || changing) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 bg-background px-6 text-foreground">
-        <h1 className="text-2xl font-semibold">{changing ? 'Change key' : 'Home Todos'}</h1>
-        <p className="text-sm text-muted-foreground">Enter the admin key to open this installation.</p>
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="flex w-full max-w-sm flex-col gap-8">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent">
+              <Icon name="house" size={30} strokeWidth={1.25} />
+            </span>
+            <h1 className="font-display text-5xl font-medium">{changing ? 'Change key' : 'Home'}</h1>
+            <p className="text-sm text-muted-foreground">Enter the admin key to open this installation.</p>
+          </div>
 
-        <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm">Admin key</span>
-            <input
-              className="rounded border border-border bg-input px-3 py-2 text-foreground"
-              type="password"
-              autoComplete="current-password"
-              autoFocus
-              required
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-            />
-          </label>
+          <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+            <label className="flex flex-col gap-2">
+              <span className={LABEL}>Admin key</span>
+              <input
+                className={INPUT}
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                required
+                value={key}
+                onChange={(event) => setKey(event.target.value)}
+              />
+            </label>
 
-          <button
-            className="rounded border border-foreground bg-foreground px-3 py-2 text-background disabled:opacity-50"
-            type="submit"
-            disabled={working}
-          >
-            {working ? 'Checking...' : 'Unlock'}
-          </button>
-
-          {changing ? (
-            <button
-              className="text-sm text-muted-foreground underline underline-offset-4"
-              type="button"
-              onClick={() => setChanging(false)}
-            >
-              Cancel
+            <button className={BUTTON_PRIMARY} type="submit" disabled={working}>
+              {working ? 'Checking...' : 'Unlock'}
             </button>
-          ) : null}
-        </form>
 
-        {error ? (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            {error}
-          </p>
-        ) : null}
+            {changing ? (
+              <button className={`${BUTTON_QUIET} self-center`} type="button" onClick={() => setChanging(false)}>
+                Cancel
+              </button>
+            ) : null}
+          </form>
+
+          {error ? (
+            <p role="alert" className="text-center text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
+        </div>
       </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <SiteHeader
-        onChangeKey={() => {
-          setError(null);
-          setChanging(true);
-        }}
-        onClearKey={clearKey}
-      />
+    <AppShell
+      onChangeKey={() => {
+        setError(null);
+        setChanging(true);
+      }}
+      onClearKey={clearKey}
+    >
       {children}
-    </div>
+    </AppShell>
   );
 }

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, createContact, fetchContacts, updateContact, type Contact, type ContactInput } from '../../lib/api';
+import { Icon } from '../../components/icons';
+import { BUTTON_PRIMARY, BUTTON_QUIET, BUTTON_SECONDARY, CARD, DISPLAY_H1, INPUT, LABEL } from '../../components/ui';
 
 const EMPTY_FORM: ContactInput = { name: '', role: '', phone: '', email: '', notes: '' };
 
@@ -20,69 +22,65 @@ function ContactForm({
 
   return (
     <form
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-4"
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (!form.name?.trim()) return;
         onSubmit(form);
       }}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm">Name</span>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-2">
+          <span className={LABEL}>Name</span>
           <input
-            className="rounded border border-border bg-input px-3 py-2 text-foreground"
+            className={INPUT}
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
             required
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm">Role</span>
+        <label className="flex flex-col gap-2">
+          <span className={LABEL}>Role</span>
           <input
-            className="rounded border border-border bg-input px-3 py-2 text-foreground"
+            className={INPUT}
             value={form.role ?? ''}
             onChange={(event) => setForm({ ...form, role: event.target.value })}
             placeholder="e.g. Roofer"
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm">Phone</span>
+        <label className="flex flex-col gap-2">
+          <span className={LABEL}>Phone</span>
           <input
-            className="rounded border border-border bg-input px-3 py-2 text-foreground"
+            className={INPUT}
             value={form.phone ?? ''}
             onChange={(event) => setForm({ ...form, phone: event.target.value })}
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm">Email</span>
+        <label className="flex flex-col gap-2">
+          <span className={LABEL}>Email</span>
           <input
             type="email"
-            className="rounded border border-border bg-input px-3 py-2 text-foreground"
+            className={INPUT}
             value={form.email ?? ''}
             onChange={(event) => setForm({ ...form, email: event.target.value })}
           />
         </label>
       </div>
-      <label className="flex flex-col gap-1">
-        <span className="text-sm">Notes</span>
+      <label className="flex flex-col gap-2">
+        <span className={LABEL}>Notes</span>
         <textarea
-          className="rounded border border-border bg-input px-3 py-2 text-foreground"
+          className={INPUT}
           value={form.notes ?? ''}
           onChange={(event) => setForm({ ...form, notes: event.target.value })}
           rows={2}
         />
       </label>
-      <div className="flex gap-2">
-        <button
-          className="rounded border border-foreground bg-foreground px-3 py-2 text-background disabled:opacity-50"
-          type="submit"
-          disabled={busy}
-        >
+      <div className="flex items-center gap-4">
+        <button className={BUTTON_PRIMARY} type="submit" disabled={busy}>
           {busy ? 'Saving...' : 'Save'}
         </button>
         {onCancel ? (
-          <button type="button" className="text-sm text-muted-foreground underline underline-offset-4" onClick={onCancel}>
+          <button type="button" className={BUTTON_QUIET} onClick={onCancel}>
             Cancel
           </button>
         ) : null}
@@ -98,7 +96,7 @@ function ContactRow({ contact, onSaved }: { contact: Contact; onSaved: (contact:
 
   if (editing) {
     return (
-      <li className="rounded border border-border bg-card p-4">
+      <li className="border-b border-divider p-5 last:border-b-0 sm:p-6">
         <ContactForm
           initial={{ name: contact.name, role: contact.role ?? '', phone: contact.phone ?? '', email: contact.email ?? '', notes: contact.notes ?? '' }}
           busy={busy}
@@ -117,24 +115,51 @@ function ContactRow({ contact, onSaved }: { contact: Contact; onSaved: (contact:
             }
           }}
         />
-        {error ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
       </li>
     );
   }
 
+  const initials = contact.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join('');
+
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 rounded border border-border bg-card p-4">
-      <div className="min-w-0 break-words">
+    <li className="flex items-start gap-4 border-b border-divider px-5 py-5 last:border-b-0 sm:px-6">
+      <span aria-hidden="true" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft font-display text-lg font-semibold text-accent">
+        {initials}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 break-words">
         <p className="font-medium">
           {contact.name}
-          {contact.role ? <span className="ml-2 text-sm text-muted-foreground">{contact.role}</span> : null}
+          {contact.role ? <span className="ml-2 text-[13px] font-normal text-muted-foreground">{contact.role}</span> : null}
         </p>
-        {contact.phone ? <p className="text-sm text-muted-foreground">{contact.phone}</p> : null}
-        {contact.email ? <p className="text-sm text-muted-foreground">{contact.email}</p> : null}
-        {contact.notes ? <p className="mt-1 text-sm">{contact.notes}</p> : null}
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
+          {contact.phone ? (
+            <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1.5 text-foreground/80 hover:text-accent">
+              <Icon name="phone" size={14} />
+              {contact.phone}
+            </a>
+          ) : null}
+          {contact.email ? (
+            <a href={`mailto:${contact.email}`} className="inline-flex min-w-0 items-center gap-1.5 break-all text-foreground/80 hover:text-accent">
+              <Icon name="mail" size={14} />
+              {contact.email}
+            </a>
+          ) : null}
+        </div>
+        {contact.notes ? <p className="text-[13px] text-muted-foreground">{contact.notes}</p> : null}
       </div>
-      <button type="button" className="shrink-0 text-sm underline underline-offset-4" onClick={() => setEditing(true)}>
-        Edit
+      <button
+        type="button"
+        aria-label={`Edit ${contact.name}`}
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={() => setEditing(true)}
+      >
+        <Icon name="pencil" size={16} />
       </button>
     </li>
   );
@@ -166,49 +191,57 @@ export default function ContactsPage() {
   }, []);
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 px-4 py-6 sm:px-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Contacts</h1>
-        <button type="button" className="rounded border border-border px-3 py-1 text-sm" onClick={() => setAdding((open) => !open)}>
-          {adding ? 'Close' : 'Add contact'}
-        </button>
+    <main className="px-4 pb-16 pt-10 sm:px-8 lg:px-16 lg:pt-12">
+      <div className="mx-auto flex max-w-3xl flex-col gap-8">
+        <header className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">The people you call</p>
+            <h1 className={DISPLAY_H1}>Contacts</h1>
+          </div>
+          {!adding ? (
+            <button type="button" className={BUTTON_SECONDARY} onClick={() => setAdding(true)}>
+              <Icon name="plus" size={16} />
+              Add contact
+            </button>
+          ) : null}
+        </header>
+
+        {adding ? (
+          <div className={`${CARD} p-5 sm:p-6`}>
+            <ContactForm
+              initial={EMPTY_FORM}
+              busy={addBusy}
+              onCancel={() => setAdding(false)}
+              onSubmit={async (input) => {
+                setAddBusy(true);
+                setAddError(null);
+                try {
+                  const { contact } = await createContact(input);
+                  setContacts((current) => [...(current ?? []), contact]);
+                  setAdding(false);
+                } catch (err) {
+                  setAddError(err instanceof ApiError ? err.message : 'Could not create the contact.');
+                } finally {
+                  setAddBusy(false);
+                }
+              }}
+            />
+            {addError ? <p className="mt-2 text-sm text-danger">{addError}</p> : null}
+          </div>
+        ) : null}
+
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {contacts === null && !error ? <p className="text-sm text-muted-foreground">Loading...</p> : null}
+        {contacts !== null && contacts.length === 0 ? <p className="text-sm text-muted-foreground">No contacts yet.</p> : null}
+
+        {contacts !== null && contacts.length > 0 ? (
+          <ul className={CARD}>
+            {contacts.map((contact) => (
+              <ContactRow key={contact.id} contact={contact} onSaved={onSaved} />
+            ))}
+          </ul>
+        ) : null}
       </div>
-
-      {adding ? (
-        <div className="rounded border border-border bg-card p-4">
-          <ContactForm
-            initial={EMPTY_FORM}
-            busy={addBusy}
-            onCancel={() => setAdding(false)}
-            onSubmit={async (input) => {
-              setAddBusy(true);
-              setAddError(null);
-              try {
-                const { contact } = await createContact(input);
-                setContacts((current) => [...(current ?? []), contact]);
-                setAdding(false);
-              } catch (err) {
-                setAddError(err instanceof ApiError ? err.message : 'Could not create the contact.');
-              } finally {
-                setAddBusy(false);
-              }
-            }}
-          />
-          {addError ? <p className="mt-2 text-sm text-red-600 dark:text-red-400">{addError}</p> : null}
-        </div>
-      ) : null}
-
-      {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
-      {contacts === null && !error ? <p className="text-sm text-muted-foreground">Loading...</p> : null}
-      {contacts !== null && contacts.length === 0 ? <p className="text-sm text-muted-foreground">No contacts yet.</p> : null}
-
-      {contacts !== null && contacts.length > 0 ? (
-        <ul className="flex flex-col gap-3">
-          {contacts.map((contact) => (
-            <ContactRow key={contact.id} contact={contact} onSaved={onSaved} />
-          ))}
-        </ul>
-      ) : null}
     </main>
   );
 }
