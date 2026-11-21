@@ -17,9 +17,10 @@ One person owns an installation. There is no signup, no sharing, and no second u
 
 ## Status
 
-This release ships the database schema, the admin-key gate, and the JSON API: create,
-read, update, and archive or delete projects, todos, and contacts, plus a read-only
-summary for other apps. There is no dashboard yet.
+This release ships the database schema, the admin-key gate, the JSON API, and the site.
+The site and the API do the same work: create, read, update, and archive or delete projects, todos, and contacts.
+The API also has a read-only summary for other apps.
+See [Use the site](#use-the-site) and [Use the API](#use-the-api).
 
 ## Your data is yours
 
@@ -135,6 +136,30 @@ curl https://<your-hostname>/api/v1/health
 
 Open `https://<your-hostname>/` and enter the key.
 
+## Use the site
+
+Open `https://<your-hostname>/` and enter the admin key once on each device.
+A sidebar on a wide screen, or a tab bar on a phone, opens each place below.
+
+- **Overview** - the counts of open, waiting, and overdue todos, the todos due soonest, and one card for each project.
+  Select the ring next to a todo to mark it done.
+  Select the **New project** card, then give a name and a kind, to make a project.
+- **A project** - its todos on three tabs: **Open**, **Waiting**, and **Done**.
+  The form at the top of the list adds a todo to this project.
+  Each row can mark a todo done, reopen it, or move it between open and waiting.
+- **A todo** - select a todo title to open it.
+  **Edit** changes the title, project, status, due date, cost, contact, repeat rule, and notes.
+  **Delete** removes the todo; mark it done instead to keep it.
+- **Contacts** - the people you call.
+  **Add contact** makes one, and the edit button on a row changes it.
+  A phone number or an email address opens the phone or mail app.
+- **New todo** - opens a short form from any page: title, project, and due date.
+  Set the other fields on the todo's own page.
+- **Settings** - the menu at the foot of the sidebar switches light and dark mode and changes or forgets the saved key.
+  On a phone the theme switch is in the tab bar.
+
+The site cannot archive or rename a project; use `PATCH` or `DELETE /api/v1/projects/:id` for that.
+
 ## Run it locally
 
 ```bash
@@ -191,6 +216,52 @@ HOMETODO_ADMIN_KEY=your-admin-key npm run import:reminders
   as a `done` todo with `completed_at` set.
 - This is a one-time seed, not ongoing sync: nothing in Home Todos writes back to
   Reminders, and nothing keeps the two in sync after the import.
+
+## Use the API
+
+Anything the site does, a script can do with the same key.
+Set two values first, so the key stays out of your shell history as a typed argument.
+
+```bash
+export HOMETODO_URL=https://<your-hostname>
+read -rs HOMETODO_KEY && export HOMETODO_KEY   # paste the admin key, then press Enter
+```
+
+Create a project.
+The response holds the new record, and its `id` is the `project_id` of each todo.
+
+```bash
+curl -s -X POST "$HOMETODO_URL/api/v1/projects" \
+  -H "X-Admin-API-Key: $HOMETODO_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"Garden","kind":"house"}'
+# {"project":{"id":"<project id>","name":"Garden","kind":"house",...}}
+```
+
+Create a todo in that project.
+
+```bash
+curl -s -X POST "$HOMETODO_URL/api/v1/todos" \
+  -H "X-Admin-API-Key: $HOMETODO_KEY" -H "Content-Type: application/json" \
+  -d '{"project_id":"<project id>","title":"Order mulch","due_date":"2026-12-01"}'
+# {"todo":{"id":"<todo id>","title":"Order mulch","status":"open",...},"next_todo":null}
+```
+
+Change a todo: send only the fields that change.
+
+```bash
+curl -s -X PATCH "$HOMETODO_URL/api/v1/todos/<todo id>" \
+  -H "X-Admin-API-Key: $HOMETODO_KEY" -H "Content-Type: application/json" \
+  -d '{"status":"done"}'
+```
+
+List the unfinished todos of one project.
+
+```bash
+curl -s "$HOMETODO_URL/api/v1/todos?project_id=<project id>&status=open" \
+  -H "X-Admin-API-Key: $HOMETODO_KEY"
+```
+
+The next section lists every route and rule.
 
 ## API
 
@@ -253,8 +324,9 @@ signup, or session route.
 ## Layout
 
 ```
-frontend/            Next.js static export behind a key gate. No dashboard yet.
-  components/        The access gate
+frontend/            Next.js static export behind a key gate
+  app/               The pages: overview, project, todo, contacts
+  components/        The access gate, the shell (sidebar and tab bar), and the icons
   lib/api.ts         API calls; attaches the saved key
 worker/
   src/index.ts       Routing only
