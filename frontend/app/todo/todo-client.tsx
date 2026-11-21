@@ -56,6 +56,26 @@ interface Draft {
   repeat_mode: RepeatMode | '';
   repeat_every: string;
   repeat_unit: RepeatUnit;
+  // Local wall-clock time in the datetime-local form, YYYY-MM-DDTHH:MM
+  remind_at: string;
+}
+
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** The stored UTC instant as the browser's local time, for a datetime-local input. */
+function toLocalInput(instant: string | null): string {
+  if (!instant) return '';
+  const date = new Date(instant);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** A datetime-local value read in the browser's zone, sent as UTC seconds. */
+function toUtcInstant(local: string): string | null {
+  const date = new Date(local);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 function toDraft(todo: Todo): Draft {
@@ -70,6 +90,7 @@ function toDraft(todo: Todo): Draft {
     repeat_mode: todo.repeat_mode ?? '',
     repeat_every: String(todo.repeat_every ?? 1),
     repeat_unit: todo.repeat_unit ?? 'week',
+    remind_at: toLocalInput(todo.remind_at),
   };
 }
 
@@ -84,6 +105,12 @@ function diff(todo: Todo, draft: Draft): TodoPatch | string {
   if (draft.status !== todo.status) changes.status = draft.status;
   const due = draft.due_date || null;
   if (due !== todo.due_date) changes.due_date = due;
+  // Compared as local input text, so an untouched field never resends a reformatted time
+  if (draft.remind_at !== toLocalInput(todo.remind_at)) {
+    const remind = draft.remind_at ? toUtcInstant(draft.remind_at) : null;
+    if (draft.remind_at && !remind) return 'Enter the reminder as a date and a time.';
+    changes.remind_at = remind;
+  }
   const cents = parseDollars(draft.cost);
   if (cents === undefined) return 'Enter the cost as dollars, for example 125 or 125.50.';
   if (cents !== todo.cost_cents) changes.cost_cents = cents;
@@ -299,6 +326,16 @@ export function TodoClient() {
                 <input type="date" className={INPUT} value={draft.due_date} onChange={(event) => setDraft({ ...draft, due_date: event.target.value })} />
               </label>
               <label className="flex flex-col gap-2">
+                <span className={LABEL}>Remind me</span>
+                <input
+                  type="datetime-local"
+                  className={INPUT}
+                  value={draft.remind_at}
+                  onChange={(event) => setDraft({ ...draft, remind_at: event.target.value })}
+                />
+                <span className="text-xs text-muted-foreground">Leave empty to be reminded on the morning of the due date.</span>
+              </label>
+              <label className="flex flex-col gap-2">
                 <span className={LABEL}>Cost (dollars)</span>
                 <input
                   className={INPUT}
@@ -462,6 +499,15 @@ export function TodoClient() {
                   </span>
                 ) : (
                   <span className="text-muted-foreground">No due date</span>
+                )}
+              </Field>
+              <Field label="Remind me" icon="calendar">
+                {todo.remind_at ? (
+                  formatTimestamp(todo.remind_at)
+                ) : todo.due_date ? (
+                  <span className="text-muted-foreground">Morning of the due date</span>
+                ) : (
+                  <span className="text-muted-foreground">No reminder</span>
                 )}
               </Field>
               <Field label="Repeats" icon="repeat">

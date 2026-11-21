@@ -67,6 +67,23 @@ the admin key.
 - Leave it unset and the summary needs the admin key like every other route. Rotate
   it with `wrangler secret put READ_TOKEN`; the admin key is not affected.
 
+### Reminders (optional)
+
+The Worker can send each todo's reminder to the live.imnotbot reminder service, which
+delivers it as an alert and an email. The feature is off unless both values are set.
+
+- `LIVE_NOTIFY_URL` (a var in `worker/wrangler.jsonc`): the API base, such as
+  `https://live.imnotbot.com/api/v1`, with no trailing slash.
+- `LIVE_NOTIFY_TOKEN` (a secret): this app's value from `NOTIFY_WRITE_TOKEN` on
+  live.imnotbot. Set it with `npx wrangler secret put LIVE_NOTIFY_TOKEN` from `worker/`.
+- A todo with a `remind_at` time is reminded then. A todo with only a `due_date` is
+  reminded on the morning of that day. A done or deleted todo, or one with neither
+  value, has its reminder finished.
+- Each todo owns one reminder, keyed `hometodo:todo:<id>`. Only the title and a link
+  to the todo are sent; notes, cost, and contacts never leave the app.
+- The call runs after the save. A failed or slow call is logged and never fails or
+  delays the save. Todos made before this feature sync on their next save.
+
 ## Deploy it in ten minutes
 
 Run the steps in order: the database has to exist before the code that reads it.
@@ -279,9 +296,9 @@ Bodies are JSON, and every response is JSON except a `204`.
 | `PATCH` | `/api/v1/projects/:id` | Change `name`, `kind`, `notes`, or `archived` (`true` or `false`). |
 | `DELETE` | `/api/v1/projects/:id` | Archive. Projects are never deleted; `PATCH {"archived":false}` restores. |
 | `GET` | `/api/v1/todos` | Todos in creation order, paged. See below. Sync pulls add `?updated_since=<UTC stamp>&include_deleted=true`. |
-| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, the repeat rule, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201` with `{todo, next_todo}`. |
+| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, `remind_at`, the repeat rule, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201` with `{todo, next_todo}`. |
 | `GET` | `/api/v1/todos/:id` | One todo. Deleted todos are `404` unless `?include_deleted=true`. |
-| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, or the repeat rule. Returns `{todo, next_todo}`. |
+| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, `remind_at`, or the repeat rule. Returns `{todo, next_todo}`. |
 | `DELETE` | `/api/v1/todos/:id` | Soft delete: stamps `deleted_at`, hides the row from every normal read. Returns `204`. |
 | `GET` | `/api/v1/contacts` | All contacts, by name. |
 | `POST` | `/api/v1/contacts` | Create: `name` (required), `role`, `phone`, `email`, `notes`. Returns `201`. |
@@ -296,7 +313,8 @@ Rules the API enforces:
 - `kind` is one of `house`, `car`, `family`, `admin`, `networking`, `other`, and
   `status` is one of `open`, `waiting`, `done`. Anything else is a `400`.
 - `due_date` is a real calendar day as `YYYY-MM-DD`. `cost_cents` is a whole,
-  non-negative number of cents.
+  non-negative number of cents. `remind_at` is a date-time with a zone, such as
+  `2026-12-01T14:00:00Z`; the server stores it as UTC, and a time with no zone is a `400`.
 - Setting `status` to `done` stamps `completed_at`; moving away from `done` clears it.
 - An unknown field, an empty update, bad JSON, or an id that names no project or
   contact is a `400` that names the field. A second todo with the same `source` and
@@ -310,7 +328,8 @@ Rules the API enforces:
 - When a todo with a rule moves to `done` (or is created already `done`), the server
   makes the next open todo with the same fields and rule and `recurs_from_id` set, and
   returns it as `next_todo`; otherwise `next_todo` is `null`. A todo gets at most one
-  successor, so reopening and finishing it again makes nothing new.
+  successor, so reopening and finishing it again makes nothing new. The successor
+  does not copy `remind_at`; its reminder falls back to its own due date.
 
 `GET /api/v1/todos` takes `project_id`, `status`, and `contact_id` filters, and hides
 todos of archived projects unless `include_archived=true`. It returns

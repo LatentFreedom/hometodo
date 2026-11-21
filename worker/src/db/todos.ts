@@ -21,6 +21,8 @@ export interface TodoRow {
 	repeat_every: number | null;
 	repeat_unit: RepeatUnit | null;
 	recurs_from_id: string | null;
+	// UTC ISO date-time; null means the reminder falls back to due_date
+	remind_at: string | null;
 }
 
 export interface TodoInsert {
@@ -39,6 +41,7 @@ export interface TodoInsert {
 	repeat_every: number | null;
 	repeat_unit: RepeatUnit | null;
 	recurs_from_id?: string | null;
+	remind_at?: string | null;
 }
 
 export interface TodoFilter {
@@ -66,6 +69,7 @@ export const TODO_UPDATE_COLUMNS = [
 	'repeat_mode',
 	'repeat_every',
 	'repeat_unit',
+	'remind_at',
 ] as const;
 
 /** Rows in a stable order, one more than asked for, so the caller can tell if a next page exists. */
@@ -129,8 +133,8 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 	const row = await db
 		.prepare(
 			`INSERT INTO todos (id, project_id, title, notes, status, due_date, cost_cents, contact_id, source, external_id,
-			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, completed_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
+			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, remind_at, completed_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
 			 RETURNING *`,
 		)
 		.bind(
@@ -148,6 +152,7 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 			input.repeat_every,
 			input.repeat_unit,
 			input.recurs_from_id ?? null,
+			input.remind_at ?? null,
 			input.status,
 		)
 		.first<TodoRow>();
@@ -159,6 +164,8 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
  * The open todo that follows a finished repeating one. INSERT OR IGNORE against the
  * unique recurs_from_id index means a todo gets at most one successor, so finishing it a
  * second time (or two clients finishing it at once) returns null instead of a duplicate.
+ * remind_at is not copied: a time picked for one occurrence means nothing for the next,
+ * so the new todo's reminder falls back to its own due date.
  */
 export async function insertNextOccurrence(db: D1Database, finished: TodoRow, dueDate: string): Promise<TodoRow | null> {
 	return db

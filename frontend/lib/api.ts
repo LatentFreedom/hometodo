@@ -98,6 +98,8 @@ export interface Todo {
   repeat_every: number | null;
   repeat_unit: RepeatUnit | null;
   recurs_from_id: string | null;
+  /** UTC ISO date-time for the reminder; null falls back to the morning of due_date. */
+  remind_at: string | null;
 }
 
 /** POST and PATCH answer with the todo and, when finishing a repeating one, the occurrence it made. */
@@ -201,7 +203,7 @@ export function createTodo(input: TodoInput): Promise<TodoReply> {
 export type TodoPatch = Partial<
   Pick<
     Todo,
-    'title' | 'notes' | 'status' | 'due_date' | 'cost_cents' | 'contact_id' | 'project_id' | 'repeat_mode' | 'repeat_every' | 'repeat_unit'
+    'title' | 'notes' | 'status' | 'due_date' | 'cost_cents' | 'contact_id' | 'project_id' | 'repeat_mode' | 'repeat_every' | 'repeat_unit' | 'remind_at'
   >
 >;
 

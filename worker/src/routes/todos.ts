@@ -4,6 +4,7 @@ import { getProject } from '../db/projects';
 import { deleteTodo, externalIdTaken, getTodo, insertNextOccurrence, insertTodo, listTodos, todoIdTaken, updateTodo, type TodoRow } from '../db/todos';
 import { decodeCursor, encodeCursor, parseLimit } from '../lib/cursor';
 import { badRequest, HttpError, notFound, readJsonObject } from '../lib/http';
+import { scheduleReminderSync } from '../lib/reminder-sync';
 import { nextDueDate, todayIn } from '../lib/repeat';
 import {
 	parseEnumQuery,
@@ -36,6 +37,7 @@ const UPDATE_FIELDS: Record<string, Field> = {
 	// A cap keeps a typo such as 9000 weeks from looking like a real rule
 	repeat_every: { type: 'count', max: 366 },
 	repeat_unit: { type: 'enum', values: REPEAT_UNITS, nullable: true },
+	remind_at: { type: 'instant' },
 };
 
 const REPEAT_FIELDS = ['repeat_mode', 'repeat_every', 'repeat_unit'] as const;
@@ -162,9 +164,11 @@ todoRoutes.post('/', async (c) => {
 		repeat_mode: (input.repeat_mode as RepeatMode | null | undefined) ?? null,
 		repeat_every: (input.repeat_every as number | null | undefined) ?? null,
 		repeat_unit: (input.repeat_unit as RepeatUnit | null | undefined) ?? null,
+		remind_at: (input.remind_at as string | null | undefined) ?? null,
 	});
 	// A replica that created and finished a todo offline sends it already done
 	const nextTodo = await spawnNext(c.env, todo);
+	scheduleReminderSync(c.executionCtx, c.env, [todo, nextTodo]);
 	return c.json({ todo, next_todo: nextTodo }, 201);
 });
 
@@ -189,6 +193,9 @@ todoRoutes.patch('/:id', async (c) => {
 	const todo = await updateTodo(c.env.DB, c.req.param('id'), changes);
 	if (!todo) throw notFound('Todo');
 	const nextTodo = before.status === 'done' ? null : await spawnNext(c.env, todo);
+	// Every PATCH syncs, even one that only touched notes: the PUT is an upsert, so a
+	// repeat is harmless, and it heals a reminder an earlier failed call left behind.
+	scheduleReminderSync(c.executionCtx, c.env, [todo, nextTodo]);
 	return c.json({ todo, next_todo: nextTodo });
 });
 
@@ -197,6 +204,8 @@ todoRoutes.patch('/:id', async (c) => {
  * a todo that should never have existed, and the stamped row only serves the sync pull.
  */
 todoRoutes.delete('/:id', async (c) => {
-	if (!(await deleteTodo(c.env.DB, c.req.param('id')))) throw notFound('Todo');
+	const id = c.req.param('id');
+	if (!(await deleteTodo(c.env.DB, id))) throw notFound('Todo');
+	scheduleReminderSync(c.executionCtx, c.env, [{ id, deleted: true }]);
 	return c.body(null, 204);
 });

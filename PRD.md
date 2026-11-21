@@ -70,9 +70,14 @@ In scope, in order:
    another application can call with a bearer token.
 3. A web interface: project cards, a per-project todo list, and a contacts page.
 4. A one-time import from an existing reminders export.
+5. Reminders: a todo can carry an exact "remind me" time, or fall back to the morning
+   of its due date. The app builds no clock, email, or push of its own; it sends each
+   reminder to an optional outside reminder service (live.imnotbot for the owner).
+   Only the todo title and its link are sent. Without the service set up, the app
+   works the same and sends nothing.
 
 Out of scope, and intended to stay out: multiple users, sharing, team permissions,
-mobile applications, notifications, and calendar sync.
+mobile applications, a notification sender inside this app, and calendar sync.
 
 ## Success
 

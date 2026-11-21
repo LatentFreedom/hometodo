@@ -22,6 +22,7 @@ export type Field =
 	| { type: 'text'; max: number; required?: boolean }
 	| { type: 'enum'; values: readonly string[]; nullable?: boolean }
 	| { type: 'date' }
+	| { type: 'instant' }
 	| { type: 'cents' }
 	| { type: 'count'; max: number }
 	| { type: 'email' }
@@ -96,6 +97,12 @@ function parseValue(key: string, raw: unknown, field: Field): Value {
 			}
 			return raw;
 		}
+		case 'instant': {
+			if (raw === null) return null;
+			const instant = typeof raw === 'string' ? toUtcInstant(raw) : null;
+			if (instant === null) throw badRequest(`${key} must be a date-time with a zone, such as 2026-12-01T14:00:00Z (UTC)`, key);
+			return instant;
+		}
 		case 'cents': {
 			if (raw === null) return null;
 			if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 0) {
@@ -141,6 +148,24 @@ export function isCalendarDate(value: string): boolean {
 	const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
 	const date = new Date(Date.UTC(year, month - 1, day));
 	return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+// The zone is required: a bare local time would mean a different moment on the server
+// than in the owner's browser.
+const INSTANT_PATTERN = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * An ISO date-time with a zone, normalised to UTC seconds such as 2026-12-01T14:00:00Z,
+ * or null when it is not one. The date part is checked as a calendar day because
+ * Date.parse rolls 2026-02-30 over into March instead of refusing it.
+ */
+export function toUtcInstant(value: string): string | null {
+	const match = INSTANT_PATTERN.exec(value.trim());
+	if (!match || !isCalendarDate(match[1] as string)) return null;
+	if (Number(match[2]) > 23 || Number(match[3]) > 59 || Number(match[4] ?? 0) > 59) return null;
+	const time = Date.parse(value.trim());
+	if (Number.isNaN(time)) return null;
+	return new Date(time).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 /** A `true`/`false` query flag; absent means false, anything else is a 400. */
