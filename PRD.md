@@ -71,10 +71,9 @@ In scope, in order:
 3. A web interface: project cards, a per-project todo list, and a contacts page.
 4. A one-time import from an existing reminders export.
 5. Reminders: a todo can carry an exact "remind me" time, or fall back to the morning
-   of its due date. The app builds no clock, email, or push of its own; it sends each
-   reminder to an optional outside reminder service (live.imnotbot for the owner).
-   Only the todo title and its link are sent. Without the service set up, the app
-   works the same and sends nothing.
+   of its due date. The app builds no clock, email, or push of its own, and it sends
+   no data to any other service. A client that reads the todos, such as the owner's
+   phone app, sets the reminder on its own device.
 
 Out of scope, and intended to stay out: multiple users, sharing, team permissions,
 mobile applications, a notification sender inside this app, and calendar sync.

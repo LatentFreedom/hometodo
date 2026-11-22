@@ -13,15 +13,4 @@ export interface Env {
 	FRONTEND_URL: string;
 	/** IANA zone that decides "today" for repeating todos. Non-secret; lives in wrangler.jsonc vars. */
 	HOME_TZ: string;
-	/**
-	 * API base of the live.imnotbot notification service, such as
-	 * https://live.imnotbot.com/api/v1, with no trailing slash. Non-secret; lives in
-	 * wrangler.jsonc vars. Empty or unset turns reminder sync off.
-	 */
-	LIVE_NOTIFY_URL?: string;
-	/**
-	 * This app's write token for live.imnotbot, sent as a Bearer token. Secret; set with
-	 * `wrangler secret put LIVE_NOTIFY_TOKEN`. Empty or unset turns reminder sync off.
-	 */
-	LIVE_NOTIFY_TOKEN?: string;
 }

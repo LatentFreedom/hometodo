@@ -67,22 +67,14 @@ the admin key.
 - Leave it unset and the summary needs the admin key like every other route. Rotate
   it with `wrangler secret put READ_TOKEN`; the admin key is not affected.
 
-### Reminders (optional)
+### Reminders
 
-The Worker can send each todo's reminder to the live.imnotbot reminder service, which
-delivers it as an alert and an email. The feature is off unless both values are set.
+A todo can carry an exact `remind_at` time, and it can have a `due_date`.
+The Worker only stores those two values. It sends no reminder and no data to any other service.
 
-- `LIVE_NOTIFY_URL` (a var in `worker/wrangler.jsonc`): the API base, such as
-  `https://live.imnotbot.com/api/v1`, with no trailing slash.
-- `LIVE_NOTIFY_TOKEN` (a secret): this app's value from `NOTIFY_WRITE_TOKEN` on
-  live.imnotbot. Set it with `npx wrangler secret put LIVE_NOTIFY_TOKEN` from `worker/`.
-- A todo with a `remind_at` time is reminded then. A todo with only a `due_date` is
-  reminded on the morning of that day. A done or deleted todo, or one with neither
-  value, has its reminder finished.
-- Each todo owns one reminder, keyed `hometodo:todo:<id>`. Only the title and a link
-  to the todo are sent; notes, cost, and contacts never leave the app.
-- The call runs after the save. A failed or slow call is logged and never fails or
-  delays the save. Todos made before this feature sync on their next save.
+A client that reads the todos sets the reminder on its own device.
+The owner's phone app does this: it notifies at the `remind_at` time, or at 09:00 on the due day.
+A date changed on the site reaches a client at its next read of the list.
 
 ## Deploy it in ten minutes
 

@@ -13,9 +13,3 @@ ADMIN_API_KEY=replace-with-a-long-random-key
 # GET /api/v1/summary and nothing else; every other route answers 403. Leave it unset
 # and the summary needs the admin key like everything else.
 READ_TOKEN=replace-with-a-different-long-random-token
-
-# Optional. This app's write token for live.imnotbot, which sends each todo's reminder
-# as an alert and an email. It is the Home Todos value in NOTIFY_WRITE_TOKEN on
-# live.imnotbot. With it unset, no reminder is sent and every route works as before.
-# LIVE_NOTIFY_URL (the API base) lives in wrangler.jsonc vars.
-# LIVE_NOTIFY_TOKEN=replace-with-the-home-todos-notify-token

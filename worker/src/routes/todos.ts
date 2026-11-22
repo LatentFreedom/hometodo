@@ -4,7 +4,6 @@ import { getProject } from '../db/projects';
 import { deleteTodo, externalIdTaken, getTodo, insertNextOccurrence, insertTodo, listTodos, todoIdTaken, updateTodo, type TodoRow } from '../db/todos';
 import { decodeCursor, encodeCursor, parseLimit } from '../lib/cursor';
 import { badRequest, HttpError, notFound, readJsonObject } from '../lib/http';
-import { scheduleReminderSync } from '../lib/reminder-sync';
 import { nextDueDate, todayIn } from '../lib/repeat';
 import {
 	parseEnumQuery,
@@ -168,7 +167,6 @@ todoRoutes.post('/', async (c) => {
 	});
 	// A replica that created and finished a todo offline sends it already done
 	const nextTodo = await spawnNext(c.env, todo);
-	scheduleReminderSync(c.executionCtx, c.env, [todo, nextTodo]);
 	return c.json({ todo, next_todo: nextTodo }, 201);
 });
 
@@ -193,9 +191,6 @@ todoRoutes.patch('/:id', async (c) => {
 	const todo = await updateTodo(c.env.DB, c.req.param('id'), changes);
 	if (!todo) throw notFound('Todo');
 	const nextTodo = before.status === 'done' ? null : await spawnNext(c.env, todo);
-	// Every PATCH syncs, even one that only touched notes: the PUT is an upsert, so a
-	// repeat is harmless, and it heals a reminder an earlier failed call left behind.
-	scheduleReminderSync(c.executionCtx, c.env, [todo, nextTodo]);
 	return c.json({ todo, next_todo: nextTodo });
 });
 
@@ -206,6 +201,5 @@ todoRoutes.patch('/:id', async (c) => {
 todoRoutes.delete('/:id', async (c) => {
 	const id = c.req.param('id');
 	if (!(await deleteTodo(c.env.DB, id))) throw notFound('Todo');
-	scheduleReminderSync(c.executionCtx, c.env, [{ id, deleted: true }]);
 	return c.body(null, 204);
 });

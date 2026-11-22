@@ -49,14 +49,9 @@
 	 * Deployed values only. Local dev reads worker/.dev.vars, which overrides
 	 * FRONTEND_URL and ALLOWED_ORIGINS with their localhost equivalents - so localhost
 	 * must never appear here, or CORS rejects the real site.
-	 *
-	 * LIVE_NOTIFY_URL is the live.imnotbot API base for todo reminders. Reminders stay
-	 * off until the LIVE_NOTIFY_TOKEN secret is set too; a self-hosted copy can delete
-	 * the line or leave the secret unset.
 	 */
 	"vars": {
 		"FRONTEND_URL": "https://home.imnotbot.com",
-		"LIVE_NOTIFY_URL": "https://live.imnotbot.com/api/v1",
 		"HOME_TZ": "America/Indiana/Indianapolis",
 		"ALLOWED_ORIGINS": "https://home.imnotbot.com,https://hometodo.pages.dev,http://localhost:3000,http://127.0.0.1:3000"
 	}
