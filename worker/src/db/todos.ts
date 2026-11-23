@@ -1,5 +1,5 @@
 import type { CursorPosition } from '../lib/cursor';
-import type { RepeatMode, RepeatUnit, TodoSource, TodoStatus, Value } from '../lib/validate';
+import type { PlaceTrigger, RepeatMode, RepeatUnit, TodoSource, TodoStatus, Value } from '../lib/validate';
 import { assign, updateRow, type Assignment } from './update';
 
 export interface TodoRow {
@@ -25,6 +25,9 @@ export interface TodoRow {
 	recurs_from_id: string | null;
 	// UTC ISO date-time; null means the reminder falls back to due_date
 	remind_at: string | null;
+	// A saved place to remind at, on arrival or departure; both null together
+	place_id: string | null;
+	place_trigger: PlaceTrigger | null;
 }
 
 export interface TodoInsert {
@@ -45,6 +48,8 @@ export interface TodoInsert {
 	recurs_from_id?: string | null;
 	remind_at?: string | null;
 	due_time?: string | null;
+	place_id?: string | null;
+	place_trigger?: PlaceTrigger | null;
 }
 
 export interface TodoFilter {
@@ -74,6 +79,8 @@ export const TODO_UPDATE_COLUMNS = [
 	'repeat_every',
 	'repeat_unit',
 	'remind_at',
+	'place_id',
+	'place_trigger',
 ] as const;
 
 /** Rows in a stable order, one more than asked for, so the caller can tell if a next page exists. */
@@ -137,8 +144,8 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 	const row = await db
 		.prepare(
 			`INSERT INTO todos (id, project_id, title, notes, status, due_date, cost_cents, contact_id, source, external_id,
-			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, remind_at, due_time, completed_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
+			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, remind_at, due_time, place_id, place_trigger, completed_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
 			 RETURNING *`,
 		)
 		.bind(
@@ -158,6 +165,8 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 			input.recurs_from_id ?? null,
 			input.remind_at ?? null,
 			input.due_time ?? null,
+			input.place_id ?? null,
+			input.place_trigger ?? null,
 			input.status,
 		)
 		.first<TodoRow>();
@@ -171,14 +180,15 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
  * second time (or two clients finishing it at once) returns null instead of a duplicate.
  * remind_at is not copied: a time picked for one occurrence means nothing for the next,
  * so the new todo's reminder falls back to its own due date. due_time is copied, because
- * an hour such as "bins out by 07:00" belongs to the rule, not to one occurrence.
+ * an hour such as "bins out by 07:00" belongs to the rule, not to one occurrence; the
+ * same holds for a place reminder.
  */
 export async function insertNextOccurrence(db: D1Database, finished: TodoRow, dueDate: string): Promise<TodoRow | null> {
 	return db
 		.prepare(
 			`INSERT OR IGNORE INTO todos (id, project_id, title, notes, status, due_date, due_time, cost_cents, contact_id, source,
-			   repeat_mode, repeat_every, repeat_unit, recurs_from_id)
-			 VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 'manual', ?, ?, ?, ?)
+			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, place_id, place_trigger)
+			 VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?)
 			 RETURNING *`,
 		)
 		.bind(
@@ -194,6 +204,8 @@ export async function insertNextOccurrence(db: D1Database, finished: TodoRow, du
 			finished.repeat_every,
 			finished.repeat_unit,
 			finished.id,
+			finished.place_id,
+			finished.place_trigger,
 		)
 		.first<TodoRow>();
 }

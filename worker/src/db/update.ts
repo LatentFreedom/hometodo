@@ -14,7 +14,7 @@ export function assign(column: string, value: Value): Assignment {
 	return { sql: `${column} = ?`, values: [value] };
 }
 
-type Table = 'projects' | 'todos' | 'contacts';
+type Table = 'projects' | 'todos' | 'contacts' | 'places';
 
 /** Applies the assignments, stamps updated_at, and returns the new row (null when absent). */
 export function updateRow<T>(db: D1Database, table: Table, id: string, assignments: Assignment[]): Promise<T | null> {

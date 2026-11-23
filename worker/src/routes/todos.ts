@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { getContact } from '../db/contacts';
+import { getPlace } from '../db/places';
 import { getProject } from '../db/projects';
 import { deleteTodo, externalIdTaken, getTodo, insertNextOccurrence, insertTodo, listTodos, todoIdTaken, updateTodo, type TodoRow } from '../db/todos';
 import { decodeCursor, encodeCursor, parseLimit } from '../lib/cursor';
@@ -9,6 +10,8 @@ import {
 	parseEnumQuery,
 	parseFlag,
 	parseInput,
+	parseStamp,
+	PLACE_TRIGGERS,
 	REPEAT_MODES,
 	REPEAT_UNITS,
 	TODO_SOURCES,
@@ -17,6 +20,7 @@ import {
 	type RepeatMode,
 	type RepeatUnit,
 	type TodoSource,
+	type PlaceTrigger,
 	type TodoStatus,
 	type Value,
 } from '../lib/validate';
@@ -38,6 +42,8 @@ const UPDATE_FIELDS: Record<string, Field> = {
 	repeat_every: { type: 'count', max: 366 },
 	repeat_unit: { type: 'enum', values: REPEAT_UNITS, nullable: true },
 	remind_at: { type: 'instant' },
+	place_id: { type: 'ref' },
+	place_trigger: { type: 'enum', values: PLACE_TRIGGERS, nullable: true },
 };
 
 const REPEAT_FIELDS = ['repeat_mode', 'repeat_every', 'repeat_unit'] as const;
@@ -52,17 +58,6 @@ const CREATE_FIELDS: Record<string, Field> = {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// updated_since arrives as ISO 8601 or as the D1 form 'YYYY-MM-DD HH:MM:SS'; rows are
-// compared as text in the D1 form, so the value is normalised to it here.
-const STAMP_PATTERN = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]00:?00)?$/;
-
-function parseStamp(name: string, raw: string | undefined): string | null {
-	if (raw === undefined) return null;
-	const match = STAMP_PATTERN.exec(raw);
-	if (!match) throw badRequest(`${name} must be a UTC timestamp such as 2026-01-31T12:00:00Z`, name);
-	return `${match[1]} ${match[2]}`;
-}
-
 /**
  * A todo must belong to a real project and may name a real contact. Checked here so a
  * bad id is a 400 that names the field, not a foreign-key 500.
@@ -76,6 +71,9 @@ async function checkReferences(db: D1Database, input: Record<string, Value>): Pr
 	}
 	if (typeof input.contact_id === 'string' && !(await getContact(db, input.contact_id))) {
 		throw badRequest('contact_id does not match a contact', 'contact_id');
+	}
+	if (typeof input.place_id === 'string' && !(await getPlace(db, input.place_id))) {
+		throw badRequest('place_id does not match a place', 'place_id');
 	}
 }
 
@@ -107,6 +105,19 @@ function checkDueTime(input: Record<string, Value>, existing: TodoRow | null): v
 	if (dueTime !== null && dueDate === null) {
 		throw badRequest('due_time needs a due_date', 'due_time');
 	}
+}
+
+/**
+ * A trigger means nothing without a place, and a place with no trigger means arrive.
+ * Clearing the place clears the trigger with it, unless the same PATCH sends a trigger,
+ * which is then a 400.
+ */
+function checkPlace(input: Record<string, Value>, existing: TodoRow | null): void {
+	if (existing !== null && input.place_id === null && !('place_trigger' in input)) input.place_trigger = null;
+	const placeId = ('place_id' in input ? input.place_id : existing?.place_id) ?? null;
+	const trigger = ('place_trigger' in input ? input.place_trigger : existing?.place_trigger) ?? null;
+	if (trigger !== null && placeId === null) throw badRequest('place_trigger needs a place_id', 'place_trigger');
+	if (placeId !== null && trigger === null) input.place_trigger = 'arrive';
 }
 
 /** The successor of a todo that just became done, or null when it has no rule or already has one. */
@@ -149,6 +160,7 @@ todoRoutes.post('/', async (c) => {
 	await checkReferences(c.env.DB, input);
 	checkRepeatRule(input, null);
 	checkDueTime(input, null);
+	checkPlace(input, null);
 
 	const source = (input.source as TodoSource | undefined) ?? 'manual';
 	const externalId = (input.external_id as string | null | undefined) ?? null;
@@ -180,6 +192,8 @@ todoRoutes.post('/', async (c) => {
 		repeat_every: (input.repeat_every as number | null | undefined) ?? null,
 		repeat_unit: (input.repeat_unit as RepeatUnit | null | undefined) ?? null,
 		remind_at: (input.remind_at as string | null | undefined) ?? null,
+		place_id: (input.place_id as string | null | undefined) ?? null,
+		place_trigger: (input.place_trigger as PlaceTrigger | null | undefined) ?? null,
 	});
 	// A replica that created and finished a todo offline sends it already done
 	const nextTodo = await spawnNext(c.env, todo);
@@ -205,6 +219,7 @@ todoRoutes.patch('/:id', async (c) => {
 	if (!before) throw notFound('Todo');
 	checkRepeatRule(changes, before);
 	checkDueTime(changes, before);
+	checkPlace(changes, before);
 	const todo = await updateTodo(c.env.DB, c.req.param('id'), changes);
 	if (!todo) throw notFound('Todo');
 	const nextTodo = before.status === 'done' ? null : await spawnNext(c.env, todo);

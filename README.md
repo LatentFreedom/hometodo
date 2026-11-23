@@ -76,6 +76,12 @@ A client that reads the todos sets the reminder on its own device.
 The owner's phone app does this: `remind_at` wins; otherwise it notifies on the due day at `due_time`, or at 09:00 when the todo has no time.
 A date changed on the site reaches a client at its next read of the list.
 
+A todo can also point at one saved place with `place_id`, and `place_trigger` says
+whether to remind on arrival (`arrive`) or on departure (`leave`).
+The phone watches the places; the Worker only stores them and returns them to the key holder.
+On the site, pick a place in the todo's edit form, or choose "New place..." and paste
+its coordinates from a map app.
+
 ## Deploy it in ten minutes
 
 Run the steps in order: the database has to exist before the code that reads it.
@@ -288,15 +294,20 @@ Bodies are JSON, and every response is JSON except a `204`.
 | `PATCH` | `/api/v1/projects/:id` | Change `name`, `kind`, `notes`, or `archived` (`true` or `false`). |
 | `DELETE` | `/api/v1/projects/:id` | Archive. Projects are never deleted; `PATCH {"archived":false}` restores. |
 | `GET` | `/api/v1/todos` | Todos in creation order, paged. See below. Sync pulls add `?updated_since=<UTC stamp>&include_deleted=true`. |
-| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `due_time`, `cost_cents`, `contact_id`, `remind_at`, the repeat rule, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201` with `{todo, next_todo}`. |
+| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `due_time`, `cost_cents`, `contact_id`, `remind_at`, `place_id`, `place_trigger`, the repeat rule, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201` with `{todo, next_todo}`. |
 | `GET` | `/api/v1/todos/:id` | One todo. Deleted todos are `404` unless `?include_deleted=true`. |
-| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `due_time`, `cost_cents`, `contact_id`, `remind_at`, or the repeat rule. Returns `{todo, next_todo}`. |
+| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `due_time`, `cost_cents`, `contact_id`, `remind_at`, `place_id`, `place_trigger`, or the repeat rule. Returns `{todo, next_todo}`. |
 | `DELETE` | `/api/v1/todos/:id` | Soft delete: stamps `deleted_at`, hides the row from every normal read. Returns `204`. |
 | `GET` | `/api/v1/contacts` | All contacts, by name. |
 | `POST` | `/api/v1/contacts` | Create: `name` (required), `role`, `phone`, `email`, `notes`. Returns `201`. |
 | `GET` | `/api/v1/contacts/:id` | One contact. |
 | `PATCH` | `/api/v1/contacts/:id` | Change any contact field. |
 | `DELETE` | `/api/v1/contacts/:id` | Delete. Its todos stay, with `contact_id` cleared. Returns `204`. |
+| `GET` | `/api/v1/places` | All saved places, by name. Sync pulls add `?updated_since=<UTC stamp>&include_deleted=true`. |
+| `POST` | `/api/v1/places` | Create: `name`, `latitude`, `longitude` (required), `radius_m` (default `150`). Returns `201` with `{place}`. |
+| `GET` | `/api/v1/places/:id` | One place. Deleted places are `404` unless `?include_deleted=true`. |
+| `PATCH` | `/api/v1/places/:id` | Change `name`, `latitude`, `longitude`, or `radius_m`. Returns `{place}`. |
+| `DELETE` | `/api/v1/places/:id` | Soft delete: stamps `deleted_at` and clears `place_id` and `place_trigger` on its todos. Returns `204`. |
 | `GET` | `/api/v1/summary` | Per active project: `open_count`, `waiting_count`, `done_count`, and `soonest_due` (the five unfinished todos due soonest). |
 
 Rules the API enforces:
@@ -310,6 +321,12 @@ Rules the API enforces:
 - `due_time` is `HH:MM` (24-hour, `00:00` to `23:59`) in the owner's local time on
   `due_date`, with no zone. It needs a `due_date` (`400` otherwise), and a change that
   sets `due_date` to `null` clears it too.
+- `place_id` names a saved place that is not deleted. `place_trigger` is `arrive` or
+  `leave`; it needs a `place_id` (`400` otherwise), defaults to `arrive` when only
+  `place_id` is sent, and is cleared when `place_id` is set to `null`.
+- A place has `latitude` -90 to 90, `longitude` -180 to 180 (decimal degrees), and
+  `radius_m` a whole number of metres from 100 to 2000. iOS does not fire reliably for
+  a region under 100 m.
 - Setting `status` to `done` stamps `completed_at`; moving away from `done` clears it.
 - An unknown field, an empty update, bad JSON, or an id that names no project or
   contact is a `400` that names the field. A second todo with the same `source` and
@@ -325,7 +342,7 @@ Rules the API enforces:
   returns it as `next_todo`; otherwise `next_todo` is `null`. A todo gets at most one
   successor, so reopening and finishing it again makes nothing new. The successor
   does not copy `remind_at`; its reminder falls back to its own due date. It does copy
-  `due_time`.
+  `due_time`, `place_id`, and `place_trigger`.
 
 `GET /api/v1/todos` takes `project_id`, `status`, and `contact_id` filters, and hides
 todos of archived projects unless `include_archived=true`. It returns

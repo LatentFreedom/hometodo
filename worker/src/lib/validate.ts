@@ -11,12 +11,14 @@ export const TODO_STATUSES = ['open', 'waiting', 'done'] as const;
 export const TODO_SOURCES = ['manual', 'reminders'] as const;
 export const REPEAT_MODES = ['fixed', 'after_done'] as const;
 export const REPEAT_UNITS = ['day', 'week', 'month'] as const;
+export const PLACE_TRIGGERS = ['arrive', 'leave'] as const;
 
 export type ProjectKind = (typeof PROJECT_KINDS)[number];
 export type TodoStatus = (typeof TODO_STATUSES)[number];
 export type TodoSource = (typeof TODO_SOURCES)[number];
 export type RepeatMode = (typeof REPEAT_MODES)[number];
 export type RepeatUnit = (typeof REPEAT_UNITS)[number];
+export type PlaceTrigger = (typeof PLACE_TRIGGERS)[number];
 
 export type Field =
 	| { type: 'text'; max: number; required?: boolean }
@@ -26,6 +28,7 @@ export type Field =
 	| { type: 'clock' }
 	| { type: 'cents' }
 	| { type: 'count'; max: number }
+	| { type: 'range'; min: number; max: number; integer?: boolean; required?: boolean }
 	| { type: 'email' }
 	| { type: 'ref' }
 	| { type: 'boolean' };
@@ -53,7 +56,7 @@ export function parseInput(
 	const output: Record<string, Value> = {};
 	for (const [key, field] of Object.entries(fields)) {
 		if (!Object.hasOwn(body, key)) {
-			if (mode === 'create' && field.type === 'text' && field.required) {
+			if (mode === 'create' && (field.type === 'text' || field.type === 'range') && field.required) {
 				throw badRequest(`${key} is required`, key);
 			}
 			continue;
@@ -125,6 +128,17 @@ function parseValue(key: string, raw: unknown, field: Field): Value {
 			}
 			return raw;
 		}
+		case 'range': {
+			if (raw === null) {
+				if (field.required) throw badRequest(`${key} is required`, key);
+				return null;
+			}
+			const kind = field.integer ? 'whole number' : 'number';
+			if (typeof raw !== 'number' || !Number.isFinite(raw) || (field.integer && !Number.isSafeInteger(raw)) || raw < field.min || raw > field.max) {
+				throw badRequest(`${key} must be a ${kind} from ${field.min} to ${field.max}`, key);
+			}
+			return raw;
+		}
 		case 'email': {
 			if (raw === null) return null;
 			if (typeof raw !== 'string') throw badRequest(`${key} must be a string`, key);
@@ -177,6 +191,18 @@ export function toUtcInstant(value: string): string | null {
 	const time = Date.parse(value.trim());
 	if (Number.isNaN(time)) return null;
 	return new Date(time).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+// updated_since arrives as ISO 8601 or as the D1 form 'YYYY-MM-DD HH:MM:SS'; rows are
+// compared as text in the D1 form, so the value is normalised to it here.
+const STAMP_PATTERN = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]00:?00)?$/;
+
+/** An optional updated_since floor for a sync pull, in the D1 stamp form. */
+export function parseStamp(name: string, raw: string | undefined): string | null {
+	if (raw === undefined) return null;
+	const match = STAMP_PATTERN.exec(raw);
+	if (!match) throw badRequest(`${name} must be a UTC timestamp such as 2026-01-31T12:00:00Z`, name);
+	return `${match[1]} ${match[2]}`;
 }
 
 /** A `true`/`false` query flag; absent means false, anything else is a 400. */

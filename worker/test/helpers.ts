@@ -60,6 +60,7 @@ export function adminHeaders(key: string = ADMIN_KEY): HeadersInit {
 export async function resetDatabase(): Promise<void> {
 	await env.DB.batch([
 		env.DB.prepare('DELETE FROM todos'),
+		env.DB.prepare('DELETE FROM places'),
 		env.DB.prepare('DELETE FROM contacts'),
 		env.DB.prepare('DELETE FROM projects'),
 		env.DB.prepare('DELETE FROM access_failures'),

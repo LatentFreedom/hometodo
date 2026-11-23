@@ -9,12 +9,16 @@ import { LinkedText } from '../../components/linked-text';
 import {
   ApiError,
   clearSavedKey,
+  createPlace,
   deleteTodo,
   fetchContacts,
+  fetchPlaces,
   fetchProjects,
   fetchTodo,
   updateTodo,
   type Contact,
+  type Place,
+  type PlaceTrigger,
   type Project,
   type RepeatMode,
   type RepeatUnit,
@@ -44,6 +48,17 @@ const REPEAT_UNITS: { value: RepeatUnit; label: string }[] = [
 
 const MAX_REPEAT_EVERY = 366;
 
+const PLACE_TRIGGERS: { value: PlaceTrigger; label: string }[] = [
+  { value: 'arrive', label: 'When I arrive' },
+  { value: 'leave', label: 'When I leave' },
+];
+
+// The select value that opens the new-place fields instead of naming a saved place
+const NEW_PLACE = '__new';
+const DEFAULT_RADIUS_M = 150;
+const MIN_RADIUS_M = 100;
+const MAX_RADIUS_M = 2000;
+
 
 interface Draft {
   title: string;
@@ -60,6 +75,13 @@ interface Draft {
   repeat_unit: RepeatUnit;
   // Local wall-clock time in the datetime-local form, YYYY-MM-DDTHH:MM
   remind_at: string;
+  // A place id, '' for none, or NEW_PLACE while the owner types one in
+  place_id: string;
+  place_trigger: PlaceTrigger;
+  new_place_name: string;
+  // "latitude, longitude" as pasted from a map app
+  new_place_coords: string;
+  new_place_radius: string;
 }
 
 function pad(value: number): string {
@@ -94,7 +116,27 @@ function toDraft(todo: Todo): Draft {
     repeat_every: String(todo.repeat_every ?? 1),
     repeat_unit: todo.repeat_unit ?? 'week',
     remind_at: toLocalInput(todo.remind_at),
+    place_id: todo.place_id ?? '',
+    place_trigger: todo.place_trigger ?? 'arrive',
+    new_place_name: '',
+    new_place_coords: '',
+    new_place_radius: String(DEFAULT_RADIUS_M),
   };
+}
+
+/** The new-place fields as a place to create, or a message that says what is wrong. */
+function readNewPlace(draft: Draft): { name: string; latitude: number; longitude: number; radius_m: number } | string {
+  const name = draft.new_place_name.trim();
+  if (!name) return 'Give the new place a name.';
+  const parts = draft.new_place_coords.split(',').map((part) => part.trim());
+  const [latitude, longitude] = parts.map(Number);
+  if (parts.length !== 2 || latitude === undefined || longitude === undefined || parts.some((part) => part === '') || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+    return 'Enter the coordinates as latitude, longitude, for example 39.7684, -86.1581.';
+  }
+  if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return 'Latitude must be -90 to 90 and longitude -180 to 180.';
+  const radius = Number(draft.new_place_radius);
+  if (!Number.isInteger(radius) || radius < MIN_RADIUS_M || radius > MAX_RADIUS_M) return `The radius must be a whole number of metres from ${MIN_RADIUS_M} to ${MAX_RADIUS_M}.`;
+  return { name, latitude, longitude, radius_m: radius };
 }
 
 /** Only the fields that changed, so a save never rewrites values it did not touch. */
@@ -124,6 +166,10 @@ function diff(todo: Todo, draft: Draft): TodoPatch | string {
   const contact = draft.contact_id || null;
   if (contact !== todo.contact_id) changes.contact_id = contact;
   if (draft.project_id !== todo.project_id) changes.project_id = draft.project_id;
+  // The worker clears the trigger with the place, so a cleared place sends only place_id
+  const place = draft.place_id || null;
+  if (place !== todo.place_id) changes.place_id = place;
+  if (place && draft.place_trigger !== todo.place_trigger) changes.place_trigger = draft.place_trigger;
   // The worker takes the three repeat fields together, so any change sends all three
   if (draft.repeat_mode === '') {
     if (todo.repeat_mode !== null) Object.assign(changes, { repeat_mode: null, repeat_every: null, repeat_unit: null });
@@ -158,6 +204,7 @@ export function TodoClient() {
   const [todo, setTodo] = useState<Todo | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -190,12 +237,13 @@ export function TodoClient() {
     setNotFound(false);
     setError(null);
     /* eslint-enable react-hooks/set-state-in-effect */
-    Promise.all([fetchTodo(id), fetchProjects(), fetchContacts()])
-      .then(([todoResult, projectsResult, contactsResult]) => {
+    Promise.all([fetchTodo(id), fetchProjects(), fetchContacts(), fetchPlaces()])
+      .then(([todoResult, projectsResult, contactsResult, placesResult]) => {
         if (cancelled) return;
         setTodo(todoResult.todo);
         setProjects(projectsResult.projects);
         setContacts(contactsResult.contacts);
+        setPlaces(placesResult.places);
       })
       .catch((err) => {
         if (!cancelled) handleError(err, 'Could not load this todo.');
@@ -266,6 +314,7 @@ export function TodoClient() {
 
   const project = projects.find((candidate) => candidate.id === todo.project_id) ?? null;
   const contact = contacts.find((candidate) => candidate.id === todo.contact_id) ?? null;
+  const place = places.find((candidate) => candidate.id === todo.place_id) ?? null;
   const overdue = isOverdue(todo);
 
   return (
@@ -289,9 +338,34 @@ export function TodoClient() {
         {editing && draft ? (
           <form
             className="flex flex-col gap-6"
-            onSubmit={(event: FormEvent<HTMLFormElement>) => {
+            onSubmit={async (event: FormEvent<HTMLFormElement>) => {
               event.preventDefault();
-              const changes = diff(todo, draft);
+              let ready = draft;
+              // A new place is saved first, so the todo can point at its id
+              if (draft.place_id === NEW_PLACE) {
+                const input = readNewPlace(draft);
+                if (typeof input === 'string') {
+                  setError(input);
+                  return;
+                }
+                const changes = diff(todo, { ...draft, place_id: '' });
+                if (typeof changes === 'string') {
+                  setError(changes);
+                  return;
+                }
+                setBusy(true);
+                try {
+                  const { place: created } = await createPlace(input);
+                  setPlaces((current) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
+                  ready = { ...draft, place_id: created.id };
+                  setDraft(ready);
+                } catch (err) {
+                  handleError(err, 'Could not save the place.');
+                  setBusy(false);
+                  return;
+                }
+              }
+              const changes = diff(todo, ready);
               if (typeof changes === 'string') {
                 setError(changes);
                 return;
@@ -374,6 +448,71 @@ export function TodoClient() {
                   ))}
                 </select>
               </label>
+              <label className="flex flex-col gap-2">
+                <span className={LABEL}>Remind at a place</span>
+                <select className={INPUT} value={draft.place_id} onChange={(event) => setDraft({ ...draft, place_id: event.target.value })}>
+                  <option value="">None</option>
+                  {places.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                    </option>
+                  ))}
+                  <option value={NEW_PLACE}>New place...</option>
+                </select>
+              </label>
+              {draft.place_id ? (
+                <label className="flex flex-col gap-2">
+                  <span className={LABEL}>When</span>
+                  <select
+                    className={INPUT}
+                    value={draft.place_trigger}
+                    onChange={(event) => setDraft({ ...draft, place_trigger: event.target.value as PlaceTrigger })}
+                  >
+                    {PLACE_TRIGGERS.map((trigger) => (
+                      <option key={trigger.value} value={trigger.value}>
+                        {trigger.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="hidden sm:block" />
+              )}
+              {draft.place_id === NEW_PLACE ? (
+                <>
+                  <label className="flex flex-col gap-2">
+                    <span className={LABEL}>Place name</span>
+                    <input
+                      className={INPUT}
+                      value={draft.new_place_name}
+                      onChange={(event) => setDraft({ ...draft, new_place_name: event.target.value })}
+                      placeholder="e.g. Hardware store"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2">
+                    <span className={LABEL}>Radius (metres)</span>
+                    <input
+                      className={INPUT}
+                      type="number"
+                      min={MIN_RADIUS_M}
+                      max={MAX_RADIUS_M}
+                      inputMode="numeric"
+                      value={draft.new_place_radius}
+                      onChange={(event) => setDraft({ ...draft, new_place_radius: event.target.value })}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-2 sm:col-span-2">
+                    <span className={LABEL}>Coordinates</span>
+                    <input
+                      className={INPUT}
+                      value={draft.new_place_coords}
+                      onChange={(event) => setDraft({ ...draft, new_place_coords: event.target.value })}
+                      placeholder="latitude, longitude - e.g. 39.7684, -86.1581"
+                    />
+                    <span className="text-xs text-muted-foreground">Paste them from a map app. The phone can pick a place on a map instead.</span>
+                  </label>
+                </>
+              ) : null}
               <label className="flex flex-col gap-2 sm:col-span-2">
                 <span className={LABEL}>Repeat</span>
                 <select
@@ -529,6 +668,16 @@ export function TodoClient() {
                   <span className="text-muted-foreground">Morning of the due date</span>
                 ) : (
                   <span className="text-muted-foreground">No reminder</span>
+                )}
+              </Field>
+              <Field label="Place" icon="place">
+                {todo.place_id ? (
+                  <span>
+                    {todo.place_trigger === 'leave' ? 'When I leave ' : 'When I arrive at '}
+                    {place?.name ?? 'a saved place'}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">No place</span>
                 )}
               </Field>
               <Field label="Repeats" icon="repeat">

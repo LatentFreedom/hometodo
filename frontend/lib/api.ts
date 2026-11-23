@@ -79,6 +79,7 @@ export interface Project {
 
 export type RepeatMode = 'fixed' | 'after_done';
 export type RepeatUnit = 'day' | 'week' | 'month';
+export type PlaceTrigger = 'arrive' | 'leave';
 
 export interface Todo {
   id: string;
@@ -102,6 +103,21 @@ export interface Todo {
   recurs_from_id: string | null;
   /** UTC ISO date-time for the reminder; null falls back to due_date at due_time, or 09:00. */
   remind_at: string | null;
+  /** A saved place to remind at; place_trigger says on arrival or on departure. Both null together. */
+  place_id: string | null;
+  place_trigger: PlaceTrigger | null;
+}
+
+/** A saved place: a circle of radius_m metres that the phone watches. */
+export interface Place {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius_m: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
 }
 
 /** POST and PATCH answer with the todo and, when finishing a repeating one, the occurrence it made. */
@@ -205,7 +221,7 @@ export function createTodo(input: TodoInput): Promise<TodoReply> {
 export type TodoPatch = Partial<
   Pick<
     Todo,
-    'title' | 'notes' | 'status' | 'due_date' | 'due_time' | 'cost_cents' | 'contact_id' | 'project_id' | 'repeat_mode' | 'repeat_every' | 'repeat_unit' | 'remind_at'
+    'title' | 'notes' | 'status' | 'due_date' | 'due_time' | 'cost_cents' | 'contact_id' | 'project_id' | 'repeat_mode' | 'repeat_every' | 'repeat_unit' | 'remind_at' | 'place_id' | 'place_trigger'
   >
 >;
 
@@ -239,4 +255,19 @@ export function createContact(input: ContactInput): Promise<{ contact: Contact }
 
 export function updateContact(id: string, changes: Partial<ContactInput>): Promise<{ contact: Contact }> {
   return apiJson(`/api/v1/contacts/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) });
+}
+
+export function fetchPlaces(): Promise<{ places: Place[] }> {
+  return apiJson('/api/v1/places');
+}
+
+export interface PlaceInput {
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius_m?: number;
+}
+
+export function createPlace(input: PlaceInput): Promise<{ place: Place }> {
+  return apiJson('/api/v1/places', { method: 'POST', body: JSON.stringify(input) });
 }

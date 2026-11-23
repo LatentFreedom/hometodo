@@ -6,6 +6,7 @@ import { cors } from './middleware/cors';
 import { accessRoutes } from './routes/access';
 import { contactRoutes } from './routes/contacts';
 import { healthRoutes } from './routes/health';
+import { placeRoutes } from './routes/places';
 import { projectRoutes } from './routes/projects';
 import { summaryRoutes } from './routes/summary';
 import { todoRoutes } from './routes/todos';
@@ -30,6 +31,7 @@ app.route(`${API_BASE_PATH}/access`, accessRoutes);
 app.route(`${API_BASE_PATH}/projects`, projectRoutes);
 app.route(`${API_BASE_PATH}/todos`, todoRoutes);
 app.route(`${API_BASE_PATH}/contacts`, contactRoutes);
+app.route(`${API_BASE_PATH}/places`, placeRoutes);
 app.route(`${API_BASE_PATH}/summary`, summaryRoutes);
 
 app.notFound((c) => c.json({ error: 'NOT_FOUND', message: 'Endpoint not found' }, 404));
