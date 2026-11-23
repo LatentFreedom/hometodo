@@ -69,11 +69,11 @@ the admin key.
 
 ### Reminders
 
-A todo can carry an exact `remind_at` time, and it can have a `due_date`.
-The Worker only stores those two values. It sends no reminder and no data to any other service.
+A todo can carry an exact `remind_at` time, and it can have a `due_date` with an optional `due_time`.
+The Worker only stores those values. It sends no reminder and no data to any other service.
 
 A client that reads the todos sets the reminder on its own device.
-The owner's phone app does this: it notifies at the `remind_at` time, or at 09:00 on the due day.
+The owner's phone app does this: `remind_at` wins; otherwise it notifies on the due day at `due_time`, or at 09:00 when the todo has no time.
 A date changed on the site reaches a client at its next read of the list.
 
 ## Deploy it in ten minutes
@@ -288,9 +288,9 @@ Bodies are JSON, and every response is JSON except a `204`.
 | `PATCH` | `/api/v1/projects/:id` | Change `name`, `kind`, `notes`, or `archived` (`true` or `false`). |
 | `DELETE` | `/api/v1/projects/:id` | Archive. Projects are never deleted; `PATCH {"archived":false}` restores. |
 | `GET` | `/api/v1/todos` | Todos in creation order, paged. See below. Sync pulls add `?updated_since=<UTC stamp>&include_deleted=true`. |
-| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, `remind_at`, the repeat rule, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201` with `{todo, next_todo}`. |
+| `POST` | `/api/v1/todos` | Create: `project_id` and `title` (required), `notes`, `status`, `due_date`, `due_time`, `cost_cents`, `contact_id`, `remind_at`, the repeat rule, `source`, `external_id`, and an optional client `id` (UUID; `409` if taken). Returns `201` with `{todo, next_todo}`. |
 | `GET` | `/api/v1/todos/:id` | One todo. Deleted todos are `404` unless `?include_deleted=true`. |
-| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `cost_cents`, `contact_id`, `remind_at`, or the repeat rule. Returns `{todo, next_todo}`. |
+| `PATCH` | `/api/v1/todos/:id` | Change `project_id`, `title`, `notes`, `status`, `due_date`, `due_time`, `cost_cents`, `contact_id`, `remind_at`, or the repeat rule. Returns `{todo, next_todo}`. |
 | `DELETE` | `/api/v1/todos/:id` | Soft delete: stamps `deleted_at`, hides the row from every normal read. Returns `204`. |
 | `GET` | `/api/v1/contacts` | All contacts, by name. |
 | `POST` | `/api/v1/contacts` | Create: `name` (required), `role`, `phone`, `email`, `notes`. Returns `201`. |
@@ -307,6 +307,9 @@ Rules the API enforces:
 - `due_date` is a real calendar day as `YYYY-MM-DD`. `cost_cents` is a whole,
   non-negative number of cents. `remind_at` is a date-time with a zone, such as
   `2026-12-01T14:00:00Z`; the server stores it as UTC, and a time with no zone is a `400`.
+- `due_time` is `HH:MM` (24-hour, `00:00` to `23:59`) in the owner's local time on
+  `due_date`, with no zone. It needs a `due_date` (`400` otherwise), and a change that
+  sets `due_date` to `null` clears it too.
 - Setting `status` to `done` stamps `completed_at`; moving away from `done` clears it.
 - An unknown field, an empty update, bad JSON, or an id that names no project or
   contact is a `400` that names the field. A second todo with the same `source` and
@@ -321,7 +324,8 @@ Rules the API enforces:
   makes the next open todo with the same fields and rule and `recurs_from_id` set, and
   returns it as `next_todo`; otherwise `next_todo` is `null`. A todo gets at most one
   successor, so reopening and finishing it again makes nothing new. The successor
-  does not copy `remind_at`; its reminder falls back to its own due date.
+  does not copy `remind_at`; its reminder falls back to its own due date. It does copy
+  `due_time`.
 
 `GET /api/v1/todos` takes `project_id`, `status`, and `contact_id` filters, and hides
 todos of archived projects unless `include_archived=true`. It returns

@@ -23,6 +23,7 @@ export type Field =
 	| { type: 'enum'; values: readonly string[]; nullable?: boolean }
 	| { type: 'date' }
 	| { type: 'instant' }
+	| { type: 'clock' }
 	| { type: 'cents' }
 	| { type: 'count'; max: number }
 	| { type: 'email' }
@@ -103,6 +104,13 @@ function parseValue(key: string, raw: unknown, field: Field): Value {
 			if (instant === null) throw badRequest(`${key} must be a date-time with a zone, such as 2026-12-01T14:00:00Z (UTC)`, key);
 			return instant;
 		}
+		case 'clock': {
+			if (raw === null) return null;
+			if (typeof raw !== 'string' || !CLOCK_PATTERN.test(raw)) {
+				throw badRequest(`${key} must be a time of day in HH:MM form, from 00:00 to 23:59`, key);
+			}
+			return raw;
+		}
 		case 'cents': {
 			if (raw === null) return null;
 			if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 0) {
@@ -149,6 +157,9 @@ export function isCalendarDate(value: string): boolean {
 	const date = new Date(Date.UTC(year, month - 1, day));
 	return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
+
+// A wall-clock time with no zone and no seconds, read in the owner's own zone
+const CLOCK_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 // The zone is required: a bare local time would mean a different moment on the server
 // than in the owner's browser.

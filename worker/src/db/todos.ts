@@ -9,6 +9,8 @@ export interface TodoRow {
 	notes: string | null;
 	status: TodoStatus;
 	due_date: string | null;
+	// "HH:MM" in the owner's local time; null means a date-only todo
+	due_time: string | null;
 	cost_cents: number | null;
 	contact_id: string | null;
 	source: TodoSource;
@@ -42,6 +44,7 @@ export interface TodoInsert {
 	repeat_unit: RepeatUnit | null;
 	recurs_from_id?: string | null;
 	remind_at?: string | null;
+	due_time?: string | null;
 }
 
 export interface TodoFilter {
@@ -64,6 +67,7 @@ export const TODO_UPDATE_COLUMNS = [
 	'notes',
 	'status',
 	'due_date',
+	'due_time',
 	'cost_cents',
 	'contact_id',
 	'repeat_mode',
@@ -133,8 +137,8 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 	const row = await db
 		.prepare(
 			`INSERT INTO todos (id, project_id, title, notes, status, due_date, cost_cents, contact_id, source, external_id,
-			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, remind_at, completed_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
+			   repeat_mode, repeat_every, repeat_unit, recurs_from_id, remind_at, due_time, completed_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'done' THEN CURRENT_TIMESTAMP END)
 			 RETURNING *`,
 		)
 		.bind(
@@ -153,6 +157,7 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
 			input.repeat_unit,
 			input.recurs_from_id ?? null,
 			input.remind_at ?? null,
+			input.due_time ?? null,
 			input.status,
 		)
 		.first<TodoRow>();
@@ -165,14 +170,15 @@ export async function insertTodo(db: D1Database, input: TodoInsert): Promise<Tod
  * unique recurs_from_id index means a todo gets at most one successor, so finishing it a
  * second time (or two clients finishing it at once) returns null instead of a duplicate.
  * remind_at is not copied: a time picked for one occurrence means nothing for the next,
- * so the new todo's reminder falls back to its own due date.
+ * so the new todo's reminder falls back to its own due date. due_time is copied, because
+ * an hour such as "bins out by 07:00" belongs to the rule, not to one occurrence.
  */
 export async function insertNextOccurrence(db: D1Database, finished: TodoRow, dueDate: string): Promise<TodoRow | null> {
 	return db
 		.prepare(
-			`INSERT OR IGNORE INTO todos (id, project_id, title, notes, status, due_date, cost_cents, contact_id, source,
+			`INSERT OR IGNORE INTO todos (id, project_id, title, notes, status, due_date, due_time, cost_cents, contact_id, source,
 			   repeat_mode, repeat_every, repeat_unit, recurs_from_id)
-			 VALUES (?, ?, ?, ?, 'open', ?, ?, ?, 'manual', ?, ?, ?, ?)
+			 VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, 'manual', ?, ?, ?, ?)
 			 RETURNING *`,
 		)
 		.bind(
@@ -181,6 +187,7 @@ export async function insertNextOccurrence(db: D1Database, finished: TodoRow, du
 			finished.title,
 			finished.notes,
 			dueDate,
+			finished.due_time,
 			finished.cost_cents,
 			finished.contact_id,
 			finished.repeat_mode,

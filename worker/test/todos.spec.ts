@@ -486,3 +486,74 @@ describe('repeating todos', () => {
 		expect((await done(todo.id)).next_todo).toBeNull();
 	});
 });
+
+describe('todo due time', () => {
+	beforeEach(resetDatabase);
+
+	interface Reply {
+		todo: Todo;
+		next_todo: Todo | null;
+	}
+
+	it('refuses a time that is not HH:MM from 00:00 to 23:59', async () => {
+		const project = await createProject();
+		for (const due_time of ['25:00', '24:00', '9:30', '12:60', '14:30:00', 1430]) {
+			const response = await post(TODOS, { project_id: project.id, title: 'Example', due_date: '2026-12-01', due_time }, adminHeaders());
+			expect(response.status).toBe(400);
+			expect(await response.json()).toMatchObject({ field: 'due_time' });
+		}
+		const todo = await createTodo(project.id, { due_date: '2026-12-01', due_time: '00:00' });
+		expect(todo.due_time).toBe('00:00');
+	});
+
+	it('refuses a due time without a due date, on create and on update', async () => {
+		const project = await createProject();
+		const response = await post(TODOS, { project_id: project.id, title: 'Example', due_time: '14:30' }, adminHeaders());
+		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ field: 'due_time' });
+
+		const todo = await createTodo(project.id);
+		expect(todo.due_time).toBeNull();
+		expect((await patch(`${TODOS}/${todo.id}`, { due_time: '14:30' }, adminHeaders())).status).toBe(400);
+	});
+
+	it('stores a time on PATCH and clears it with the due date', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, { due_date: '2026-12-01' });
+
+		expect((await patch(`${TODOS}/${todo.id}`, { due_time: '14:30' }, adminHeaders())).status).toBe(200);
+		expect(await (await get(`${TODOS}/${todo.id}`, adminHeaders())).json()).toMatchObject({ todo: { due_date: '2026-12-01', due_time: '14:30' } });
+
+		// Moving the date keeps the time
+		const moved = await patch(`${TODOS}/${todo.id}`, { due_date: '2026-12-02' }, adminHeaders());
+		expect(await moved.json()).toMatchObject({ todo: { due_date: '2026-12-02', due_time: '14:30' } });
+
+		const cleared = await patch(`${TODOS}/${todo.id}`, { due_date: null }, adminHeaders());
+		expect(await cleared.json()).toMatchObject({ todo: { due_date: null, due_time: null } });
+
+		// A PATCH that clears the date and sends a time is a contradiction
+		await patch(`${TODOS}/${todo.id}`, { due_date: '2026-12-01', due_time: '08:00' }, adminHeaders());
+		expect((await patch(`${TODOS}/${todo.id}`, { due_date: null, due_time: '09:00' }, adminHeaders())).status).toBe(400);
+	});
+
+	it('copies the due time to the next occurrence of a repeating todo', async () => {
+		const project = await createProject();
+		const todo = await createTodo(project.id, {
+			due_date: '2026-10-06',
+			due_time: '07:00',
+			remind_at: '2026-10-05T20:00:00Z',
+			repeat_mode: 'fixed',
+			repeat_every: 1,
+			repeat_unit: 'week',
+		});
+		const reply = (await (await patch(`${TODOS}/${todo.id}`, { status: 'done' }, adminHeaders())).json()) as Reply;
+		expect(reply.next_todo).toMatchObject({ due_time: '07:00', remind_at: null });
+	});
+
+	it('returns due_time on the sync pull', async () => {
+		const project = await createProject();
+		await createTodo(project.id, { due_date: '2026-12-01', due_time: '18:15' });
+		const body = (await (await get(`${TODOS}?updated_since=2000-01-01T00:00:00Z`, adminHeaders())).json()) as { todos: Todo[] };
+		expect(body.todos[0]?.due_time).toBe('18:15');
+	});
+});

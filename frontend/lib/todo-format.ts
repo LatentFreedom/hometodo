@@ -57,6 +57,13 @@ export function formatTimestamp(value: string | null): string | null {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
 }
 
+/** A stored "HH:MM" due time in the browser's own clock style, such as 2:30 PM. */
+export function formatClock(clock: string): string {
+  const [hours, minutes] = clock.split(':').map(Number);
+  if (hours === undefined || minutes === undefined || Number.isNaN(hours) || Number.isNaN(minutes)) return clock;
+  return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 const CURRENCY = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
 
 export function formatCost(cents: number | null): string | null {

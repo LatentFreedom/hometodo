@@ -87,6 +87,8 @@ export interface Todo {
   notes: string | null;
   status: TodoStatus;
   due_date: string | null;
+  /** "HH:MM" in local time on due_date; null means a date-only todo. */
+  due_time: string | null;
   cost_cents: number | null;
   contact_id: string | null;
   source: 'manual' | 'reminders';
@@ -98,7 +100,7 @@ export interface Todo {
   repeat_every: number | null;
   repeat_unit: RepeatUnit | null;
   recurs_from_id: string | null;
-  /** UTC ISO date-time for the reminder; null falls back to the morning of due_date. */
+  /** UTC ISO date-time for the reminder; null falls back to due_date at due_time, or 09:00. */
   remind_at: string | null;
 }
 
@@ -203,7 +205,7 @@ export function createTodo(input: TodoInput): Promise<TodoReply> {
 export type TodoPatch = Partial<
   Pick<
     Todo,
-    'title' | 'notes' | 'status' | 'due_date' | 'cost_cents' | 'contact_id' | 'project_id' | 'repeat_mode' | 'repeat_every' | 'repeat_unit' | 'remind_at'
+    'title' | 'notes' | 'status' | 'due_date' | 'due_time' | 'cost_cents' | 'contact_id' | 'project_id' | 'repeat_mode' | 'repeat_every' | 'repeat_unit' | 'remind_at'
   >
 >;
 

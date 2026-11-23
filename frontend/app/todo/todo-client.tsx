@@ -22,7 +22,7 @@ import {
   type TodoPatch,
   type TodoStatus,
 } from '../../lib/api';
-import { describeRepeat, formatCost, formatDay, formatTimestamp, isOverdue, parseDollars } from '../../lib/todo-format';
+import { describeRepeat, formatClock, formatCost, formatDay, formatTimestamp, isOverdue, parseDollars } from '../../lib/todo-format';
 
 const STATUSES: { value: TodoStatus; label: string }[] = [
   { value: 'open', label: 'Open' },
@@ -50,6 +50,8 @@ interface Draft {
   notes: string;
   status: TodoStatus;
   due_date: string;
+  // HH:MM from a time input; empty means a date-only todo
+  due_time: string;
   cost: string;
   contact_id: string;
   project_id: string;
@@ -84,6 +86,7 @@ function toDraft(todo: Todo): Draft {
     notes: todo.notes ?? '',
     status: todo.status,
     due_date: todo.due_date ?? '',
+    due_time: todo.due_time ?? '',
     cost: todo.cost_cents === null ? '' : (todo.cost_cents / 100).toFixed(2),
     contact_id: todo.contact_id ?? '',
     project_id: todo.project_id,
@@ -105,6 +108,10 @@ function diff(todo: Todo, draft: Draft): TodoPatch | string {
   if (draft.status !== todo.status) changes.status = draft.status;
   const due = draft.due_date || null;
   if (due !== todo.due_date) changes.due_date = due;
+  // The worker clears the time with the date, so a cleared date sends no time
+  const dueTime = due ? draft.due_time || null : null;
+  if (dueTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(dueTime)) return 'Enter the due time as hours and minutes.';
+  if (due && dueTime !== todo.due_time) changes.due_time = dueTime;
   // Compared as local input text, so an untouched field never resends a reformatted time
   if (draft.remind_at !== toLocalInput(todo.remind_at)) {
     const remind = draft.remind_at ? toUtcInstant(draft.remind_at) : null;
@@ -326,6 +333,17 @@ export function TodoClient() {
                 <input type="date" className={INPUT} value={draft.due_date} onChange={(event) => setDraft({ ...draft, due_date: event.target.value })} />
               </label>
               <label className="flex flex-col gap-2">
+                <span className={LABEL}>Due time</span>
+                <input
+                  type="time"
+                  className={INPUT}
+                  value={draft.due_time}
+                  disabled={!draft.due_date}
+                  onChange={(event) => setDraft({ ...draft, due_time: event.target.value })}
+                />
+                <span className="text-xs text-muted-foreground">Optional. Needs a due date.</span>
+              </label>
+              <label className="flex flex-col gap-2">
                 <span className={LABEL}>Remind me</span>
                 <input
                   type="datetime-local"
@@ -333,7 +351,7 @@ export function TodoClient() {
                   value={draft.remind_at}
                   onChange={(event) => setDraft({ ...draft, remind_at: event.target.value })}
                 />
-                <span className="text-xs text-muted-foreground">Leave empty to be reminded on the morning of the due date.</span>
+                <span className="text-xs text-muted-foreground">Leave empty to be reminded at the due time, or on the morning of the due date.</span>
               </label>
               <label className="flex flex-col gap-2">
                 <span className={LABEL}>Cost (dollars)</span>
@@ -495,6 +513,7 @@ export function TodoClient() {
                 {todo.due_date ? (
                   <span className={overdue ? 'text-danger' : ''}>
                     {formatDay(todo.due_date)}
+                    {todo.due_time ? ` at ${formatClock(todo.due_time)}` : ''}
                     {overdue ? ' (overdue)' : ''}
                   </span>
                 ) : (
@@ -504,6 +523,8 @@ export function TodoClient() {
               <Field label="Remind me" icon="calendar">
                 {todo.remind_at ? (
                   formatTimestamp(todo.remind_at)
+                ) : todo.due_date && todo.due_time ? (
+                  <span className="text-muted-foreground">At the due time</span>
                 ) : todo.due_date ? (
                   <span className="text-muted-foreground">Morning of the due date</span>
                 ) : (

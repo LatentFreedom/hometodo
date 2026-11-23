@@ -30,6 +30,7 @@ const UPDATE_FIELDS: Record<string, Field> = {
 	notes: { type: 'text', max: 10_000 },
 	status: { type: 'enum', values: TODO_STATUSES },
 	due_date: { type: 'date' },
+	due_time: { type: 'clock' },
 	cost_cents: { type: 'cents' },
 	contact_id: { type: 'ref' },
 	repeat_mode: { type: 'enum', values: REPEAT_MODES, nullable: true },
@@ -95,6 +96,19 @@ function checkRepeatRule(input: Record<string, Value>, existing: TodoRow | null)
 	}
 }
 
+/**
+ * A due time is an hour on the due day, so it needs a due date. Clearing the due date
+ * clears the time with it, unless the same PATCH sends a time, which is then a 400.
+ */
+function checkDueTime(input: Record<string, Value>, existing: TodoRow | null): void {
+	if (existing !== null && input.due_date === null && !('due_time' in input)) input.due_time = null;
+	const dueDate = ('due_date' in input ? input.due_date : existing?.due_date) ?? null;
+	const dueTime = ('due_time' in input ? input.due_time : existing?.due_time) ?? null;
+	if (dueTime !== null && dueDate === null) {
+		throw badRequest('due_time needs a due_date', 'due_time');
+	}
+}
+
 /** The successor of a todo that just became done, or null when it has no rule or already has one. */
 function spawnNext(env: Env, finished: TodoRow): Promise<TodoRow | null> {
 	if (finished.status !== 'done' || !finished.repeat_mode || !finished.repeat_every || !finished.repeat_unit) {
@@ -134,6 +148,7 @@ todoRoutes.post('/', async (c) => {
 	if (!('project_id' in input)) throw badRequest('project_id is required', 'project_id');
 	await checkReferences(c.env.DB, input);
 	checkRepeatRule(input, null);
+	checkDueTime(input, null);
 
 	const source = (input.source as TodoSource | undefined) ?? 'manual';
 	const externalId = (input.external_id as string | null | undefined) ?? null;
@@ -156,6 +171,7 @@ todoRoutes.post('/', async (c) => {
 		notes: (input.notes as string | null | undefined) ?? null,
 		status: (input.status as TodoStatus | undefined) ?? 'open',
 		due_date: (input.due_date as string | null | undefined) ?? null,
+		due_time: (input.due_time as string | null | undefined) ?? null,
 		cost_cents: (input.cost_cents as number | null | undefined) ?? null,
 		contact_id: (input.contact_id as string | null | undefined) ?? null,
 		source,
@@ -188,6 +204,7 @@ todoRoutes.patch('/:id', async (c) => {
 	const before = await getTodo(c.env.DB, c.req.param('id'));
 	if (!before) throw notFound('Todo');
 	checkRepeatRule(changes, before);
+	checkDueTime(changes, before);
 	const todo = await updateTodo(c.env.DB, c.req.param('id'), changes);
 	if (!todo) throw notFound('Todo');
 	const nextTodo = before.status === 'done' ? null : await spawnNext(c.env, todo);
